@@ -1,0 +1,57 @@
+{
+  "name": "pirate-browser-2",
+  "version": "2.0.0",
+  "description": "Pirate Browser 2.0 — Multi-account ShippingManager automation suite",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder --win",
+    "build:portable": "electron-builder --win portable",
+    "build:installer": "electron-builder --win nsis"
+  },
+  "keywords": ["shippingmanager", "automation", "electron", "userscript"],
+  "author": "RebelShip / https://github.com/justonlyforyou/",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0"
+  },
+  "build": {
+    "appId": "org.rebelship.pirate-browser",
+    "productName": "Pirate Browser 2.0",
+    "copyright": "Copyright © 2026 RebelShip",
+    "directories": {
+      "buildResources": "public",
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis",     "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "public/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Pirate Browser 2.0"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "public/**/*",
+      "node_modules/**/*"
+    ],
+    "asarUnpack": [
+      "src/scripts/**"
+    ]
+  }
+}

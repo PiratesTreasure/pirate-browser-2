@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pirate Browser 2.0</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;600&family=Inter:wght@300;400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-base:      #080b10;
+  --bg-surface:   #0d1117;
+  --bg-panel:     #111820;
+  --bg-card:      #161d27;
+  --bg-hover:     #1c2535;
+  --bg-active:    #1e2d42;
+  --border:       #1e2d42;
+  --border-light: #253347;
+  --text-primary:   #e2e8f0;
+  --text-secondary: #7a90a8;
+  --text-muted:     #3d5068;
+  --accent:       #e8912a;
+  --accent-dim:   #7a4a14;
+  --accent-glow:  rgba(232,145,42,0.15);
+  --green:  #2dd4a0;
+  --red:    #f04f5a;
+  --blue:   #4a9eff;
+  --radius: 6px;
+  --titlebar-h: 38px;
+  --tabs-h:     48px;
+  --toolbar-h:  52px;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+
+/* ── Layout ─────────────────────────────────────────────── */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ── Titlebar ────────────────────────────────────────────── */
+#titlebar {
+  display: flex;
+  align-items: center;
+  height: var(--titlebar-h);
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+  padding: 0 8px 0 14px;
+  gap: 10px;
+  z-index: 100;
+}
+.titlebar-logo {
+  display: flex; align-items: center; gap: 8px;
+  -webkit-app-region: no-drag;
+}
+.logo-text {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px; letter-spacing: 2px;
+  color: var(--accent); line-height: 1;
+}
+.logo-ver {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--text-muted);
+  letter-spacing: 1px;
+}
+.titlebar-spacer { flex: 1; }
+.titlebar-status {
+  display: flex; align-items: center; gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--text-muted);
+  -webkit-app-region: no-drag;
+}
+.status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-muted); transition: background 0.3s;
+}
+.status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.window-controls {
+  display: flex; gap: 2px;
+  -webkit-app-region: no-drag;
+  margin-left: 8px;
+}
+.wc-btn {
+  width: 30px; height: 26px; border: none;
+  background: transparent; color: var(--text-secondary);
+  cursor: pointer; border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.wc-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.wc-btn.close:hover { background: var(--red); color: #fff; }
+
+/* ── Tabs bar ────────────────────────────────────────────── */
+#tabs-bar {
+  display: flex; align-items: stretch;
+  height: var(--tabs-h);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px; gap: 3px;
+  overflow-x: auto; overflow-y: hidden;
+  flex-shrink: 0;
+}
+#tabs-bar::-webkit-scrollbar { height: 2px; }
+
+.account-tab {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 14px 0 12px;
+  min-width: 140px; max-width: 220px;
+  height: 100%; background: transparent; border: none;
+  cursor: pointer; color: var(--text-secondary);
+  font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s; white-space: nowrap;
+  border-radius: var(--radius) var(--radius) 0 0;
+  margin-top: 4px; flex-shrink: 0;
+}
+.account-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+.account-tab.active { background: var(--bg-panel); color: var(--text-primary); border-bottom-color: var(--accent); }
+.account-tab.active .tab-dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.tab-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+.tab-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tab-close {
+  width: 16px; height: 16px; border-radius: 50%; border: none;
+  background: transparent; color: var(--text-muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; flex-shrink: 0; opacity: 0; transition: all 0.15s;
+}
+.account-tab:hover .tab-close { opacity: 1; }
+.tab-close:hover { background: var(--red); color: #fff; }
+
+#add-tab-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; margin: auto 0;
+  border: 1px dashed var(--border-light); border-radius: var(--radius);
+  background: transparent; color: var(--text-muted);
+  cursor: pointer; font-size: 18px; flex-shrink: 0;
+  transition: all 0.15s;
+}
+#add-tab-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+
+/* ── Toolbar ─────────────────────────────────────────────── */
+#toolbar {
+  display: flex; align-items: center;
+  height: var(--toolbar-h);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px; gap: 8px;
+  flex-shrink: 0; z-index: 80;
+}
+.nav-btn {
+  width: 32px; height: 32px;
+  border: 1px solid var(--border-light); border-radius: var(--radius);
+  background: var(--bg-card); color: var(--text-secondary);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; flex-shrink: 0;
+}
+.nav-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+.url-bar {
+  flex: 1; height: 32px;
+  background: var(--bg-card); border: 1px solid var(--border-light);
+  border-radius: var(--radius); color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  padding: 0 12px; outline: none; transition: border-color 0.15s;
+}
+.url-bar:focus { border-color: var(--accent); }
+.url-bar::placeholder { color: var(--text-muted); }
+.toolbar-div { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
+.toolbar-btn {
+  display: flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  border: 1px solid var(--border-light); border-radius: var(--radius);
+  background: var(--bg-card); color: var(--text-secondary);
+  cursor: pointer; font-family: 'Inter', sans-serif;
+  font-size: 12px; font-weight: 500;
+  transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+}
+.toolbar-btn:hover,
+.toolbar-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+.badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  background: var(--accent); color: #000;
+  font-size: 10px; font-weight: 700; border-radius: 9px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Webview container ───────────────────────────────────── */
+#webview-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+}
+
+webview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: none;
+}
+webview.active { display: flex; }
+
+/* Loading overlay */
+.wv-loading {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-base);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-muted);
+  z-index: 10;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+.wv-loading.hidden { opacity: 0; }
+.wv-loading svg { opacity: 0.2; }
+.wv-loading p { font-size: 14px; }
+
+/* ── Scripts panel ───────────────────────────────────────── */
+#scripts-panel {
+  position: fixed;
+  top: calc(var(--titlebar-h) + var(--tabs-h) + var(--toolbar-h));
+  right: 0; bottom: 0;
+  width: 320px;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  z-index: 500;
+  transform: translateX(100%);
+  transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+  box-shadow: -8px 0 32px rgba(0,0,0,0.5);
+}
+#scripts-panel.open { transform: translateX(0); }
+
+.panel-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.panel-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px; letter-spacing: 2px; flex: 1;
+}
+.panel-close {
+  width: 28px; height: 28px; border: none;
+  background: var(--bg-card); color: var(--text-secondary);
+  border-radius: var(--radius); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.panel-close:hover { background: var(--red); color: #fff; }
+
+.panel-toolbar {
+  display: flex; gap: 6px; padding: 10px 16px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.panel-btn {
+  display: flex; align-items: center; gap: 5px;
+  height: 28px; padding: 0 10px;
+  border: 1px solid var(--border-light); border-radius: var(--radius);
+  background: var(--bg-card); color: var(--text-secondary);
+  cursor: pointer; font-size: 11px; font-family: 'Inter', sans-serif;
+  font-weight: 500; transition: all 0.15s; white-space: nowrap;
+}
+.panel-btn:hover             { border-color: var(--accent); color: var(--accent); }
+.panel-btn.g:hover           { border-color: var(--green);  color: var(--green);  }
+.panel-btn.r:hover           { border-color: var(--red);    color: var(--red);    }
+
+.panel-search { padding: 10px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.panel-search input {
+  width: 100%; height: 30px;
+  background: var(--bg-card); border: 1px solid var(--border-light);
+  border-radius: var(--radius); color: var(--text-primary);
+  font-family: 'Inter', sans-serif; font-size: 12px;
+  padding: 0 10px; outline: none; transition: border-color 0.15s;
+}
+.panel-search input:focus { border-color: var(--accent); }
+.panel-search input::placeholder { color: var(--text-muted); }
+
+#scripts-list {
+  flex: 1; overflow-y: auto; padding: 8px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+
+.script-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius);
+  border: 1px solid transparent; transition: all 0.15s;
+}
+.script-item:hover { background: var(--bg-hover); border-color: var(--border); }
+.script-item.on { background: var(--bg-active); border-color: var(--border-light); }
+.script-item.on .script-name { color: var(--accent); }
+
+.script-info { flex: 1; min-width: 0; }
+.script-name {
+  font-size: 12px; font-weight: 600; color: var(--text-primary);
+  margin-bottom: 3px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.script-desc {
+  font-size: 11px; color: var(--text-muted); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden;
+}
+.script-ver {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  color: var(--text-muted); background: var(--bg-card);
+  padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border);
+  margin-top: 4px; display: inline-block;
+}
+.script-del {
+  width: 20px; height: 20px; border: none;
+  background: transparent; color: var(--text-muted);
+  cursor: pointer; border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: all 0.15s; flex-shrink: 0;
+}
+.script-item:hover .script-del { opacity: 1; }
+.script-del:hover { background: var(--red); color: #fff; }
+
+.toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; margin-top: 1px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0;
+  background: var(--bg-card); border: 1px solid var(--border-light);
+  border-radius: 10px; cursor: pointer; transition: all 0.2s;
+}
+.toggle-slider::before {
+  content: ''; position: absolute;
+  left: 2px; top: 50%; transform: translateY(-50%);
+  width: 14px; height: 14px;
+  background: var(--text-muted); border-radius: 50%; transition: all 0.2s;
+}
+.toggle input:checked + .toggle-slider { background: var(--accent-dim); border-color: var(--accent); }
+.toggle input:checked + .toggle-slider::before { left: 18px; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+/* ── Add account modal ───────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  z-index: 1000; display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.modal-overlay.visible { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--bg-panel); border: 1px solid var(--border-light);
+  border-radius: 10px; padding: 24px; width: 360px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  transform: scale(0.95); transition: transform 0.2s;
+}
+.modal-overlay.visible .modal { transform: scale(1); }
+.modal-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px; letter-spacing: 2px; color: var(--accent); margin-bottom: 20px;
+}
+.modal-label {
+  display: block; font-size: 11px; font-weight: 600;
+  color: var(--text-secondary); text-transform: uppercase;
+  letter-spacing: 1px; margin-bottom: 6px;
+}
+.modal-input {
+  width: 100%; height: 38px;
+  background: var(--bg-card); border: 1px solid var(--border-light);
+  border-radius: var(--radius); color: var(--text-primary);
+  font-family: 'Inter', sans-serif; font-size: 13px;
+  padding: 0 12px; outline: none; margin-bottom: 20px;
+  transition: border-color 0.15s;
+}
+.modal-input:focus { border-color: var(--accent); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.btn-primary {
+  height: 36px; padding: 0 20px; background: var(--accent);
+  border: none; border-radius: var(--radius); color: #000;
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: opacity 0.15s;
+}
+.btn-primary:hover { opacity: 0.85; }
+.btn-ghost {
+  height: 36px; padding: 0 16px; background: transparent;
+  border: 1px solid var(--border-light); border-radius: var(--radius);
+  color: var(--text-secondary); font-family: 'Inter', sans-serif;
+  font-size: 13px; cursor: pointer; transition: all 0.15s;
+}
+.btn-ghost:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+
+/* ── Toast ───────────────────────────────────────────────── */
+#toasts {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 2000; display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  background: var(--bg-panel); border: 1px solid var(--border-light);
+  border-radius: var(--radius); padding: 10px 16px;
+  font-size: 12px; color: var(--text-primary);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  animation: tin 0.25s ease, tout 0.25s ease 2.5s forwards;
+  display: flex; align-items: center; gap: 8px; white-space: nowrap;
+}
+.toast.s { border-color: var(--green); }
+.toast.e { border-color: var(--red); }
+.toast.i { border-color: var(--accent); }
+@keyframes tin  { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes tout { from { opacity:1; } to { opacity:0; } }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TITLEBAR -->
+  <div id="titlebar">
+    <div class="titlebar-logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17h8v-2.26C17.81 13.47 19 11.38 19 9c0-3.87-3.13-7-7-7z" fill="#e8912a"/>
+        <circle cx="9" cy="9" r="1.5" fill="#080b10"/>
+        <circle cx="15" cy="9" r="1.5" fill="#080b10"/>
+        <path d="M9 17v1.5a1.5 1.5 0 003 0V17M12 17v1.5" stroke="#e8912a" stroke-width="1.5"/>
+        <path d="M4 20l5-3M20 20l-5-3M8 21h8" stroke="#e8912a" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div class="logo-text">Pirate Browser</div>
+        <div class="logo-ver" id="app-version">v2.0.0</div>
+      </div>
+    </div>
+    <div class="titlebar-spacer"></div>
+    <div class="titlebar-status">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">connecting...</span>
+    </div>
+    <div class="window-controls">
+      <button class="wc-btn" onclick="window.pirate.window.minimize()">
+        <svg width="12" height="2" viewBox="0 0 12 2"><rect width="12" height="2" rx="1" fill="currentColor"/></svg>
+      </button>
+      <button class="wc-btn" onclick="window.pirate.window.maximize()">
+        <svg width="11" height="11" viewBox="0 0 11 11"><rect x=".5" y=".5" width="10" height="10" rx="1" stroke="currentColor" fill="none"/></svg>
+      </button>
+      <button class="wc-btn close" onclick="window.pirate.window.close()">
+        <svg width="11" height="11" viewBox="0 0 11 11"><path d="M1 1l9 9M10 1l-9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- TABS BAR -->
+  <div id="tabs-bar">
+    <button id="add-tab-btn" title="Add Account" onclick="openAddModal()">+</button>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div id="toolbar">
+    <button class="nav-btn" onclick="navBack()" title="Back">
+      <svg width="14" height="14" viewBox="0 0 14 14"><path d="M9 2L4 7l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </button>
+    <button class="nav-btn" onclick="navReload()" title="Reload">
+      <svg width="14" height="14" viewBox="0 0 14 14"><path d="M12 7A5 5 0 112 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M12 3v4h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </button>
+    <input class="url-bar" id="url-bar" type="text" placeholder="https://shippingmanager.cc"
+      onkeydown="if(event.key==='Enter') navGo()">
+    <div class="toolbar-div"></div>
+    <button class="toolbar-btn" id="scripts-btn" onclick="togglePanel()">
+      <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 4h10M2 7h7M2 10h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Scripts <span class="badge" id="enabled-count">0</span>
+    </button>
+  </div>
+
+  <!-- WEBVIEW CONTAINER -->
+  <div id="webview-container">
+    <div class="wv-loading" id="loading-overlay">
+      <svg width="72" height="72" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17h8v-2.26C17.81 13.47 19 11.38 19 9c0-3.87-3.13-7-7-7z" fill="#e8912a"/>
+        <circle cx="9" cy="9" r="1.5" fill="#080b10"/>
+        <circle cx="15" cy="9" r="1.5" fill="#080b10"/>
+        <path d="M9 17v1.5a1.5 1.5 0 003 0V17" stroke="#e8912a" stroke-width="1.5"/>
+      </svg>
+      <p>Loading ShippingManager...</p>
+    </div>
+    <!-- webview tags injected here by JS -->
+  </div>
+
+</div><!-- #app -->
+
+<!-- SCRIPTS PANEL -->
+<div id="scripts-panel">
+  <div class="panel-header">
+    <div class="panel-title">Scripts</div>
+    <button class="panel-close" onclick="togglePanel()">
+      <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1l-10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div class="panel-toolbar">
+    <button class="panel-btn g" onclick="enableAll()">✓ All On</button>
+    <button class="panel-btn r" onclick="disableAll()">✕ All Off</button>
+    <button class="panel-btn" onclick="addScript()">+ Add</button>
+    <button class="panel-btn" onclick="window.pirate.scripts.openFolder()" title="Open scripts folder">📁</button>
+  </div>
+  <div class="panel-search">
+    <input type="text" id="search-input" placeholder="Search scripts..." oninput="filterScripts(this.value)">
+  </div>
+  <div id="scripts-list"></div>
+</div>
+
+<!-- ADD ACCOUNT MODAL -->
+<div class="modal-overlay" id="add-modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-title">New Account</div>
+    <label class="modal-label">Account Label</label>
+    <input class="modal-input" id="modal-input" type="text" placeholder="e.g. Main, Alt 1..."
+      onkeydown="if(event.key==='Enter') confirmAdd()">
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="confirmAdd()">Add Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOASTS -->
+<div id="toasts"></div>
+
+<script>
+'use strict';
+
+const TARGET = 'https://shippingmanager.cc';
+
+// ── State ────────────────────────────────────────────────────
+let activeId    = null;
+let allScripts  = [];
+let filterText  = '';
+let panelOpen   = false;
+
+// webviews map: accountId → <webview> element
+const webviews = new Map();
+
+// ── Boot ─────────────────────────────────────────────────────
+async function init() {
+  document.getElementById('app-version').textContent =
+    'v' + await window.pirate.app.version();
+
+  const accounts = await window.pirate.accounts.list();
+
+  for (const acc of accounts) {
+    createTab(acc.id, acc.label);
+    createWebview(acc.id);
+  }
+
+  if (accounts.length > 0) {
+    switchTo(accounts[0].id);
+  }
+
+  setTimeout(() => setStatus(true), 1500);
+}
+
+// ── Webview management ───────────────────────────────────────
+function createWebview(id) {
+  const partition = `persist:account-${id}`;
+  window.pirate.accounts.setupPartition(partition);
+
+  const wv = document.createElement('webview');
+  wv.id = `wv-${id}`;
+  wv.setAttribute('partition', partition);
+  wv.setAttribute('src', TARGET);
+  wv.setAttribute('useragent',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
+    'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+  wv.setAttribute('allowpopups', 'false');
+  wv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;display:none;';
+
+  // Hide loading overlay once first webview loads
+  wv.addEventListener('did-finish-load', async () => {
+    const url = wv.getURL();
+    document.getElementById('url-bar').value = url;
+    setStatus(true);
+
+    // Hide loading overlay
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.classList.add('hidden');
+
+    // Inject enabled scripts
+    if (url.startsWith(TARGET)) {
+      const scripts = await window.pirate.scripts.getAllEnabled(id);
+      for (const s of scripts) {
+        try { wv.executeJavaScript(s.src); } catch {}
+      }
+    }
+  });
+
+  wv.addEventListener('did-navigate', () => {
+    if (id === activeId) {
+      document.getElementById('url-bar').value = wv.getURL();
+    }
+  });
+
+  wv.addEventListener('new-window', (e) => {
+    if (e.url && !e.url.startsWith(TARGET)) {
+      window.pirate.shell.openExternal(e.url);
+    }
+  });
+
+  document.getElementById('webview-container').appendChild(wv);
+  webviews.set(id, wv);
+  return wv;
+}
+
+function switchTo(id) {
+  // Hide all webviews
+  for (const [vid, wv] of webviews) {
+    wv.style.display = 'none';
+    wv.classList.remove('active');
+  }
+  // Show target
+  const wv = webviews.get(id);
+  if (wv) {
+    wv.style.display = 'flex';
+    wv.classList.add('active');
+    document.getElementById('url-bar').value = wv.getURL() || TARGET;
+  }
+  // Update tabs
+  document.querySelectorAll('.account-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.id === id)
+  );
+  activeId = id;
+
+  // Refresh scripts panel if open
+  if (panelOpen) loadScripts(id);
+  updateBadge();
+}
+
+// ── Tab management ────────────────────────────────────────────
+function createTab(id, label) {
+  const tab = document.createElement('button');
+  tab.className = 'account-tab';
+  tab.dataset.id = id;
+  tab.innerHTML = `
+    <div class="tab-dot"></div>
+    <span class="tab-label" title="${label}">${label}</span>
+    <button class="tab-close" onclick="removeAccount(event,'${id}')">
+      <svg width="8" height="8" viewBox="0 0 8 8">
+        <path d="M1 1l6 6M7 1l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </button>`;
+  tab.onclick = (e) => { if (!e.target.closest('.tab-close')) switchTo(id); };
+  tab.addEventListener('dblclick', (e) => {
+    if (e.target.closest('.tab-close')) return;
+    const n = prompt('Rename account:', label);
+    if (n && n.trim()) {
+      window.pirate.accounts.rename(id, n.trim());
+      tab.querySelector('.tab-label').textContent = n.trim();
+    }
+  });
+  document.getElementById('tabs-bar').insertBefore(
+    tab, document.getElementById('add-tab-btn')
+  );
+}
+
+async function removeAccount(e, id) {
+  e.stopPropagation();
+  if (!confirm('Remove this account?')) return;
+  await window.pirate.accounts.remove(id);
+  document.querySelector(`.account-tab[data-id="${id}"]`)?.remove();
+  const wv = webviews.get(id);
+  if (wv) { wv.remove(); webviews.delete(id); }
+  if (activeId === id) {
+    const first = document.querySelector('.account-tab');
+    if (first) switchTo(first.dataset.id);
+  }
+  toast('Account removed', 'i');
+}
+
+// ── Add Account Modal ─────────────────────────────────────────
+function openAddModal() {
+  document.getElementById('add-modal').classList.add('visible');
+  setTimeout(() => document.getElementById('modal-input').focus(), 50);
+}
+function closeModal(e) {
+  if (e && e.target !== e.currentTarget) return;
+  document.getElementById('add-modal').classList.remove('visible');
+  document.getElementById('modal-input').value = '';
+}
+async function confirmAdd() {
+  const label = document.getElementById('modal-input').value.trim();
+  if (!label) return;
+  const acc = await window.pirate.accounts.add(label);
+  createTab(acc.id, acc.label);
+  createWebview(acc.id);
+  switchTo(acc.id);
+  document.getElementById('add-modal').classList.remove('visible');
+  document.getElementById('modal-input').value = '';
+  toast('Account added: ' + label, 's');
+}
+
+// ── Navigation ────────────────────────────────────────────────
+function navBack()   { webviews.get(activeId)?.goBack(); }
+function navReload() { webviews.get(activeId)?.reload(); }
+function navGo() {
+  let url = document.getElementById('url-bar').value.trim();
+  if (!url.startsWith('http')) url = 'https://' + url;
+  webviews.get(activeId)?.loadURL(url);
+}
+
+// ── Scripts panel ─────────────────────────────────────────────
+function togglePanel() {
+  panelOpen = !panelOpen;
+  document.getElementById('scripts-panel').classList.toggle('open', panelOpen);
+  document.getElementById('scripts-btn').classList.toggle('active', panelOpen);
+  if (panelOpen && activeId) loadScripts(activeId);
+}
+
+async function loadScripts(accountId) {
+  allScripts = await window.pirate.scripts.list(accountId);
+  renderScripts(filterText);
+  updateBadge();
+}
+
+function renderScripts(filter = '') {
+  const list = document.getElementById('scripts-list');
+  list.innerHTML = '';
+  const filtered = filter
+    ? allScripts.filter(s =>
+        s.name.toLowerCase().includes(filter.toLowerCase()) ||
+        s.description.toLowerCase().includes(filter.toLowerCase()))
+    : allScripts;
+
+  if (!filtered.length) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">No scripts found</div>';
+    return;
+  }
+
+  for (const s of filtered) {
+    const name = s.name.replace(/^ShippingManager\s*[-–]\s*/i, '');
+    const div  = document.createElement('div');
+    div.className = 'script-item' + (s.enabled ? ' on' : '');
+    div.dataset.fn = s.filename;
+    div.innerHTML = `
+      <label class="toggle">
+        <input type="checkbox" ${s.enabled ? 'checked' : ''}
+          onchange="toggleScript('${s.filename}', this.checked)">
+        <div class="toggle-slider"></div>
+      </label>
+      <div class="script-info">
+        <div class="script-name">${name}</div>
+        <div class="script-desc">${s.description || '—'}</div>
+        <span class="script-ver">v${s.version}</span>
+      </div>
+      <button class="script-del" onclick="removeScript(event,'${s.filename}','${name.replace(/'/g,"\\'")}')">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>`;
+    list.appendChild(div);
+  }
+}
+
+function filterScripts(v) {
+  filterText = v;
+  renderScripts(v);
+}
+
+async function toggleScript(filename, enabled) {
+  if (!activeId) return;
+  await window.pirate.scripts.toggle(activeId, filename, enabled);
+  const s = allScripts.find(x => x.filename === filename);
+  if (s) s.enabled = enabled;
+  document.querySelector(`.script-item[data-fn="${filename}"]`)
+    ?.classList.toggle('on', enabled);
+
+  // Inject immediately if enabling
+  if (enabled) {
+    const wv = webviews.get(activeId);
+    const scripts = await window.pirate.scripts.getAllEnabled(activeId);
+    const sc = scripts.find(x => x.filename === filename);
+    if (wv && sc) { try { wv.executeJavaScript(sc.src); } catch {} }
+  }
+  updateBadge();
+}
+
+async function enableAll() {
+  if (!activeId) return;
+  await window.pirate.scripts.toggleAll(activeId, true);
+  await loadScripts(activeId);
+  // Re-inject all
+  const wv = webviews.get(activeId);
+  if (wv) {
+    const scripts = await window.pirate.scripts.getAllEnabled(activeId);
+    for (const s of scripts) { try { wv.executeJavaScript(s.src); } catch {} }
+  }
+  toast('All scripts enabled', 's');
+}
+
+async function disableAll() {
+  if (!activeId) return;
+  await window.pirate.scripts.toggleAll(activeId, false);
+  await loadScripts(activeId);
+  toast('All scripts disabled', 'i');
+}
+
+async function addScript() {
+  const added = await window.pirate.scripts.add();
+  if (added?.length) {
+    await loadScripts(activeId);
+    toast(`Added ${added.length} script(s)`, 's');
+  }
+}
+
+async function removeScript(e, filename, name) {
+  e.stopPropagation();
+  if (!confirm(`Remove "${name}"?\nThis will delete the script file.`)) return;
+  await window.pirate.scripts.remove(filename);
+  await loadScripts(activeId);
+  toast(`Removed: ${name}`, 'i');
+}
+
+function updateBadge() {
+  const count = allScripts.filter(s => s.enabled).length;
+  document.getElementById('enabled-count').textContent = count;
+}
+
+// ── Status ────────────────────────────────────────────────────
+function setStatus(online) {
+  document.getElementById('status-dot').className = 'status-dot' + (online ? ' online' : '');
+  document.getElementById('status-text').textContent = online ? 'online' : 'connecting...';
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+function toast(msg, type = 'i') {
+  const icons = { s: '✓', e: '✕', i: '◆' };
+  const colors = { s: 'var(--green)', e: 'var(--red)', i: 'var(--accent)' };
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span style="color:${colors[type]}">${icons[type]}</span> ${msg}`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 2800);
+}
+
+// ── Start ─────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

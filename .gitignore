@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+npm-debug.log*
+.env
+
+# Electron build artifacts
+out/
+build/
+
+# Config
+pirate-browser-config.json
+
+# OS
+Thumbs.db
+Desktop.ini
