@@ -543,13 +543,41 @@
         }
         if (vessels.length === 0) return;
 
-        // Check if any tracking is active before processing
+        var vesselMap = new Map(vessels.map(function(v) { return [v.id, v]; }));
+
+        // Check moorOnArrival FIRST - before any early return, so vessels on a route
+        // that were marked for mooring get parked when they arrive regardless of drydock state
+        var pendingSettingsEarly = await getSharedCategory('pendingRouteSettings');
+        if (pendingSettingsEarly) {
+            var earlyIds = Object.keys(pendingSettingsEarly);
+            var earlyChanged = false;
+            for (var ei = 0; ei < earlyIds.length; ei++) {
+                var earlyId = parseInt(earlyIds[ei], 10);
+                var earlyData = pendingSettingsEarly[earlyIds[ei]];
+                if (!earlyData || !earlyData.moorOnArrival) continue;
+                var earlyVessel = vesselMap.get(earlyId);
+                if (!earlyVessel) continue;
+                if (earlyVessel.status === 'port' && !earlyVessel.is_parked) {
+                    log((earlyData.name || earlyId) + ': Arrived at port - mooring now');
+                    var earlyMoorResult = await parkVessel(earlyId);
+                    if (earlyMoorResult && earlyMoorResult.data) {
+                        log((earlyData.name || earlyId) + ': Moored on arrival');
+                        notify('Moored on arrival: ' + (earlyData.name || earlyId), 'success');
+                    } else {
+                        log((earlyData.name || earlyId) + ': Failed to moor on arrival', 'error');
+                    }
+                    delete pendingSettingsEarly[earlyIds[ei]];
+                    earlyChanged = true;
+                }
+            }
+            if (earlyChanged) await saveSharedCategory('pendingRouteSettings', pendingSettingsEarly);
+        }
+
+        // Check if any drydock tracking is active before further processing
         var drydockVessels = await getSharedCategory('drydockVessels');
         if (!drydockVessels || Object.keys(drydockVessels).length === 0) {
             return;
         }
-
-        var vesselMap = new Map(vessels.map(function(v) { return [v.id, v]; }));
 
         // Check bug_use vessels - delete when anchored
         var bugUseVessels = await getDrydockVesselsByStatus('bug_use');
@@ -600,34 +628,6 @@
             }
         }
 
-        // Check pendingRouteSettings for moorOnArrival entries
-        var pendingSettings = await getSharedCategory('pendingRouteSettings');
-        if (pendingSettings) {
-            var pendingIds = Object.keys(pendingSettings);
-            for (var p = 0; p < pendingIds.length; p++) {
-                var pendingId = parseInt(pendingIds[p], 10);
-                var pendingData = pendingSettings[pendingIds[p]];
-                if (!pendingData || !pendingData.moorOnArrival) continue;
-
-                var pendingVessel = vesselMap.get(pendingId);
-                if (!pendingVessel) continue;
-
-                // Park the vessel when it arrives at port and is not already parked
-                if (pendingVessel.status === 'port' && !pendingVessel.is_parked) {
-                    log((pendingData.name || pendingId) + ': Arrived at port - mooring now');
-                    var moorResult = await parkVessel(pendingId);
-                    if (moorResult && moorResult.data) {
-                        log((pendingData.name || pendingId) + ': Moored on arrival');
-                        notify('Moored on arrival: ' + (pendingData.name || pendingId), 'success');
-                    } else {
-                        log((pendingData.name || pendingId) + ': Failed to moor on arrival', 'error');
-                    }
-                    // Remove the pending entry whether success or fail
-                    delete pendingSettings[pendingIds[p]];
-                    await saveSharedCategory('pendingRouteSettings', pendingSettings);
-                }
-            }
-        }
     }
 
     function handleVesselDataResponse(data) {
