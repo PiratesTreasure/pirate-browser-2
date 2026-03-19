@@ -4,11 +4,11 @@
 // @description  Fix missing vessel details (Engine, Port, Fuel Factor)
 // @version      2.15
 // @order        26
-// @author       RebelShip
+// @author       PiratesTreasure
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
-// @RequireRebelShipMenu false
+// @RequirePiratesTreasureMenu false
 // @enabled      false
 // ==/UserScript==
 
@@ -129,8 +129,8 @@
         // API response cache (most reliable)
         if (apiCache[name]) return apiCache[name];
 
-        // Acquirable vessels (shop - set by RebelShip browser)
-        var allVessels = window._rebelshipAllVessels;
+        // Acquirable vessels (shop - set by PiratesTreasure browser)
+        var allVessels = window._piratestreaureAllVessels;
         if (Array.isArray(allVessels)) {
             for (var i = 0; i < allVessels.length; i++) {
                 if (allVessels[i].name === name) return allVessels[i];

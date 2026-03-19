@@ -1,7 +1,7 @@
 {
   "name": "pirate-browser-2",
-  "version": "2.0.0",
-  "description": "Pirate Browser 2.0 — Multi-account ShippingManager automation suite",
+  "version": "2.1.0",
+  "description": "Pirate Browser 2.0 \u2014 Multi-account ShippingManager automation suite",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -10,38 +10,54 @@
     "build:portable": "electron-builder --win portable",
     "build:installer": "electron-builder --win nsis"
   },
-  "keywords": ["shippingmanager", "automation", "electron", "userscript"],
-  "author": "RebelShip / https://github.com/justonlyforyou/",
+  "keywords": [
+    "shippingmanager",
+    "automation",
+    "electron",
+    "userscript"
+  ],
+  "author": "PiratesTreasure / https://github.com/PiratesTreasure",
   "license": "MIT",
   "devDependencies": {
     "electron": "^28.3.3",
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
-    "electron-store": "^8.2.0"
+    "electron-store": "^8.2.0",
+    "electron-updater": "^6.3.9"
   },
   "build": {
-    "appId": "org.rebelship.pirate-browser",
+    "appId": "org.piratestreaure.pirate-browser",
     "productName": "Pirate Browser 2.0",
-    "copyright": "Copyright © 2026 RebelShip",
+    "copyright": "Copyright \u00a9 2026 PiratesTreasure",
     "directories": {
       "buildResources": "public",
       "output": "dist"
     },
     "win": {
       "target": [
-        { "target": "nsis",     "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "public/icon.ico",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "signingHashAlgorithms": null
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Pirate Browser 2.0"
+      "shortcutName": "Pirate Browser 2.0",
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "installerHeaderIcon": "public/icon.ico",
+      "displayLanguageSelector": false
     },
     "files": [
       "main.js",
@@ -52,6 +68,12 @@
     ],
     "asarUnpack": [
       "src/scripts/**"
-    ]
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "PiratesTreasure",
+      "repo": "pirate-browser-2"
+    },
+    "forceCodeSigning": false
   }
 }

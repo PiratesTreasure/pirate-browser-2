@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      3.27
 // @description  Shows current fuel and CO2 bunker prices with fill levels
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        19
 // @match        https://shippingmanager.cc/*
 // @grant        none
@@ -311,7 +311,7 @@
     }
 
     // Listen for header resize event to reinitialize
-    window.addEventListener('rebelship-header-resize', function() {
+    window.addEventListener('piratestreaure-header-resize', function() {
         resetElements();
         debounceResize(function() {
             if (insertPriceDisplays()) {

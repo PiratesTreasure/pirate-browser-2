@@ -2,13 +2,13 @@
 // @name        ShippingManager - Open Alliance Search
 // @description Search all open alliances
 // @version     3.57
-// @author      https://github.com/justonlyforyou/
+// @author      https://github.com/PiratesTreasure
 // @order        2
 // @match       https://shippingmanager.cc/*
 // @grant       none
 // @run-at      document-end
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // @enabled     false
 // ==/UserScript==
 /* globals Event, addMenuItem */
@@ -36,8 +36,8 @@
 
     // ==================== Global Modal Registry ====================
     // Shared registry so userscripts don't interfere with each other's modals
-    if (!window.RebelShipModalRegistry) {
-        window.RebelShipModalRegistry = {
+    if (!window.PiratesTreasureModalRegistry) {
+        window.PiratesTreasureModalRegistry = {
             activeScript: null,
             register: function(scriptName) {
                 this.activeScript = scriptName;
@@ -53,11 +53,11 @@
         };
     }
 
-    // ==================== RebelShipBridge Storage ====================
+    // ==================== PiratesTreasureBridge Storage ====================
 
     async function dbGet(key) {
         try {
-            var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             if (result) {
                 return JSON.parse(result);
             }
@@ -70,7 +70,7 @@
 
     async function dbSet(key, value) {
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
             return true;
         } catch (e) {
             console.error('[AllianceSearch] dbSet error:', e);
@@ -80,7 +80,7 @@
 
     async function dbDelete(key) {
         try {
-            await window.RebelShipBridge.storage.delete(SCRIPT_NAME, STORE_NAME, key);
+            await window.PiratesTreasureBridge.storage.delete(SCRIPT_NAME, STORE_NAME, key);
             return true;
         } catch (e) {
             console.error('[AllianceSearch] dbDelete error:', e);
@@ -448,14 +448,14 @@
         console.log('[AllianceSearch] Opening custom dialog');
 
         // Load alliances into cache BEFORE setting modal flag
-        // (rebelship-menu-click fires during await and would close the modal immediately)
+        // (piratestreaure-menu-click fires during await and would close the modal immediately)
         if (!cachedAlliances) {
             cachedAlliances = await getStoredAlliances();
         }
 
         isAllianceSearchModalOpen = true;
         modalOpenedAt = Date.now();
-        window.RebelShipModalRegistry.register(SCRIPT_NAME);
+        window.PiratesTreasureModalRegistry.register(SCRIPT_NAME);
 
         showDialog();
     }
@@ -466,9 +466,9 @@
 
         console.log('[AllianceSearch] Closing dialog');
         isAllianceSearchModalOpen = false;
-        window.RebelShipModalRegistry.unregister(SCRIPT_NAME);
+        window.PiratesTreasureModalRegistry.unregister(SCRIPT_NAME);
 
-        var modalWrapper = document.getElementById('rebelship-modal-wrapper');
+        var modalWrapper = document.getElementById('piratestreaure-modal-wrapper');
         if (modalWrapper) {
             modalWrapper.classList.add('hide');
         }
@@ -480,11 +480,11 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        // Listen for RebelShip menu clicks to close our dialog
+        // Listen for PiratesTreasure menu clicks to close our dialog
         // (but not when our own menu item just opened it — timing guard prevents race condition)
-        window.addEventListener('rebelship-menu-click', function() {
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (isAllianceSearchModalOpen && (Date.now() - modalOpenedAt > 500)) {
-                console.log('[AllianceSearch] RebelShip menu clicked, closing dialog');
+                console.log('[AllianceSearch] PiratesTreasure menu clicked, closing dialog');
                 closeAllianceSearchModal();
             }
         });
@@ -492,10 +492,10 @@
 
     // Inject game-identical modal CSS (1:1 copy from app.css)
     function injectModalStyles() {
-        if (document.getElementById('rebelship-modal-styles')) return;
+        if (document.getElementById('piratestreaure-modal-styles')) return;
 
         var style = document.createElement('style');
-        style.id = 'rebelship-modal-styles';
+        style.id = 'piratestreaure-modal-styles';
         style.textContent = [
             // Animations (exact copy from game)
             '@keyframes rs-fade-in{0%{opacity:0}to{opacity:1}}',
@@ -504,43 +504,43 @@
             '@keyframes rs-push-up{0%{transform:translateY(0)}to{transform:translateY(-10px)}}',
 
             // Modal wrapper (exact copy from game #modal-wrapper) - align-items:flex-start to position from top
-            '#rebelship-modal-wrapper{align-items:flex-start;display:flex;height:100vh;justify-content:center;left:0;overflow:hidden;position:absolute;top:0;width:100vw;z-index:9999}',
+            '#piratestreaure-modal-wrapper{align-items:flex-start;display:flex;height:100vh;justify-content:center;left:0;overflow:hidden;position:absolute;top:0;width:100vw;z-index:9999}',
 
             // Modal background (exact copy from game #modal-wrapper #modal-background)
-            '#rebelship-modal-wrapper #rebelship-modal-background{animation:rs-fade-in .15s linear forwards;background-color:rgba(0,0,0,.5);height:100%;left:0;opacity:0;position:absolute;top:0;width:100%}',
-            '#rebelship-modal-wrapper.hide #rebelship-modal-background{animation:rs-fade-out .15s linear forwards}',
+            '#piratestreaure-modal-wrapper #piratestreaure-modal-background{animation:rs-fade-in .15s linear forwards;background-color:rgba(0,0,0,.5);height:100%;left:0;opacity:0;position:absolute;top:0;width:100%}',
+            '#piratestreaure-modal-wrapper.hide #piratestreaure-modal-background{animation:rs-fade-out .15s linear forwards}',
 
             // Modal content wrapper (exact copy from game #modal-wrapper #modal-content-wrapper)
-            '#rebelship-modal-wrapper #rebelship-modal-content-wrapper{animation:rs-drop-down .15s linear forwards,rs-fade-in .15s linear forwards;height:100%;max-width:700px;opacity:0;position:relative;width:1140px;z-index:9001}',
-            '#rebelship-modal-wrapper.hide #rebelship-modal-content-wrapper{animation:rs-push-up .15s linear forwards,rs-fade-out .15s linear forwards}',
+            '#piratestreaure-modal-wrapper #piratestreaure-modal-content-wrapper{animation:rs-drop-down .15s linear forwards,rs-fade-in .15s linear forwards;height:100%;max-width:700px;opacity:0;position:relative;width:1140px;z-index:9001}',
+            '#piratestreaure-modal-wrapper.hide #piratestreaure-modal-content-wrapper{animation:rs-push-up .15s linear forwards,rs-fade-out .15s linear forwards}',
 
             // Media queries for content wrapper (exact copy from game)
-            '@media screen and (min-width:1200px){#rebelship-modal-wrapper #rebelship-modal-content-wrapper{max-width:460px}}',
-            '@media screen and (min-width:992px) and (max-width:1199px){#rebelship-modal-wrapper #rebelship-modal-content-wrapper{max-width:460px}}',
-            '@media screen and (min-width:769px) and (max-width:991px){#rebelship-modal-wrapper #rebelship-modal-content-wrapper{max-width:460px}}',
-            '@media screen and (max-width:768px){#rebelship-modal-wrapper #rebelship-modal-content-wrapper{max-width:100%}}',
+            '@media screen and (min-width:1200px){#piratestreaure-modal-wrapper #piratestreaure-modal-content-wrapper{max-width:460px}}',
+            '@media screen and (min-width:992px) and (max-width:1199px){#piratestreaure-modal-wrapper #piratestreaure-modal-content-wrapper{max-width:460px}}',
+            '@media screen and (min-width:769px) and (max-width:991px){#piratestreaure-modal-wrapper #piratestreaure-modal-content-wrapper{max-width:460px}}',
+            '@media screen and (max-width:768px){#piratestreaure-modal-wrapper #piratestreaure-modal-content-wrapper{max-width:100%}}',
 
             // Modal container (exact copy from game #modal-wrapper #modal-container)
-            '#rebelship-modal-wrapper #rebelship-modal-container{background-color:#fff;height:100vh;overflow:hidden;position:absolute;width:100%}',
+            '#piratestreaure-modal-wrapper #piratestreaure-modal-container{background-color:#fff;height:100vh;overflow:hidden;position:absolute;width:100%}',
 
             // Modal header (exact copy from game #modal-container .modal-header)
-            '#rebelship-modal-container .modal-header{align-items:center;background:#626b90;border-radius:0;color:#fff;display:flex;height:31px;justify-content:space-between;text-align:left;width:100%;border:0!important;padding:0 .5rem!important}',
+            '#piratestreaure-modal-container .modal-header{align-items:center;background:#626b90;border-radius:0;color:#fff;display:flex;height:31px;justify-content:space-between;text-align:left;width:100%;border:0!important;padding:0 .5rem!important}',
 
             // Header title (exact copy from game #modal-container .header-title)
-            '#rebelship-modal-container .header-title{font-weight:700;text-transform:uppercase;width:90%}',
+            '#piratestreaure-modal-container .header-title{font-weight:700;text-transform:uppercase;width:90%}',
 
             // Header icon (exact copy from game #modal-container .header-icon)
-            '#rebelship-modal-container .header-icon{cursor:pointer;height:1.2rem;margin:0 .5rem}',
-            '#rebelship-modal-container .header-icon.closeModal{height:19px;width:19px}',
+            '#piratestreaure-modal-container .header-icon{cursor:pointer;height:1.2rem;margin:0 .5rem}',
+            '#piratestreaure-modal-container .header-icon.closeModal{height:19px;width:19px}',
 
             // Modal content (exact copy from game #modal-container #modal-content)
-            '#rebelship-modal-container #rebelship-modal-content{height:calc(100% - 31px);max-width:inherit;overflow:hidden;display:flex;flex-direction:column}',
+            '#piratestreaure-modal-container #piratestreaure-modal-content{height:calc(100% - 31px);max-width:inherit;overflow:hidden;display:flex;flex-direction:column}',
 
             // Central container (exact copy from game #modal-container #central-container) - with padding
-            '#rebelship-modal-container #rebelship-central-container{background-color:#e9effd;margin:0;overflow-x:hidden;overflow-y:auto;width:100%;flex:1;padding:10px 15px}',
+            '#piratestreaure-modal-container #piratestreaure-central-container{background-color:#e9effd;margin:0;overflow-x:hidden;overflow-y:auto;width:100%;flex:1;padding:10px 15px}',
 
             // Hide class
-            '#rebelship-modal-wrapper.hide{pointer-events:none}',
+            '#piratestreaure-modal-wrapper.hide{pointer-events:none}',
 
             // Spin animation for loading
             '@keyframes spin{to{transform:rotate(360deg)}}'
@@ -558,7 +558,7 @@
 
         injectModalStyles();
 
-        var existing = document.getElementById('rebelship-modal-wrapper');
+        var existing = document.getElementById('piratestreaure-modal-wrapper');
         if (existing) {
             // Check if content still exists
             var contentCheck = existing.querySelector('#alliance-search-wrapper');
@@ -566,7 +566,7 @@
                 existing.classList.remove('hide');
                 isAllianceSearchModalOpen = true;
                 modalOpenedAt = Date.now();
-                window.RebelShipModalRegistry.register(SCRIPT_NAME);
+                window.PiratesTreasureModalRegistry.register(SCRIPT_NAME);
                 updateDialogState();
                 return;
             }
@@ -582,17 +582,17 @@
         // Structure: #modal-wrapper > #modal-background + #modal-content-wrapper > #modal-container > .modal-header + #modal-content > #central-container
 
         var modalWrapper = document.createElement('div');
-        modalWrapper.id = 'rebelship-modal-wrapper';
+        modalWrapper.id = 'piratestreaure-modal-wrapper';
 
         var modalBackground = document.createElement('div');
-        modalBackground.id = 'rebelship-modal-background';
+        modalBackground.id = 'piratestreaure-modal-background';
         modalBackground.onclick = function() { closeAllianceSearchModal(); };
 
         var modalContentWrapper = document.createElement('div');
-        modalContentWrapper.id = 'rebelship-modal-content-wrapper';
+        modalContentWrapper.id = 'piratestreaure-modal-content-wrapper';
 
         var modalContainer = document.createElement('div');
-        modalContainer.id = 'rebelship-modal-container';
+        modalContainer.id = 'piratestreaure-modal-container';
         modalContainer.className = 'font-lato';
         // Inline styles for positioning (same as game applies dynamically)
         modalContainer.style.top = headerHeight + 'px';
@@ -625,10 +625,10 @@
 
         // Modal content (exact structure as game)
         var modalContent = document.createElement('div');
-        modalContent.id = 'rebelship-modal-content';
+        modalContent.id = 'piratestreaure-modal-content';
 
         var centralContainer = document.createElement('div');
-        centralContainer.id = 'rebelship-central-container';
+        centralContainer.id = 'piratestreaure-central-container';
 
         var content = buildSearchContent();
         centralContainer.appendChild(content);
@@ -648,7 +648,7 @@
     function buildSearchContent() {
         var wrapper = document.createElement('div');
         wrapper.id = 'alliance-search-wrapper';
-        wrapper.dataset.rebelshipModal = 'alliance-search';
+        wrapper.dataset.piratestreaureModal = 'alliance-search';
         wrapper.style.cssText = 'display:flex;flex-direction:column;height:100%;min-height:0;';
 
         var indexingContainer = document.createElement('div');

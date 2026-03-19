@@ -2,13 +2,13 @@
 // @name        ShippingManager - Export all your vessels details
 // @description Export all your vessels with details as CSV
 // @version     1.23
-// @author      https://github.com/justonlyforyou/
+// @author      https://github.com/PiratesTreasure
 // @order        994
 // @match       https://shippingmanager.cc/*
 // @grant       none
 // @run-at      document-end
 // @enabled     false
-// @RequireRebelShipMenu true
+// @RequirePiratesTreasureMenu true
 // ==/UserScript==
 /* globals Blob, URL, addMenuItem */
 
@@ -73,7 +73,7 @@
     }
 
     function exportVessels() {
-        var dropdown = document.getElementById('rebelship-dropdown');
+        var dropdown = document.getElementById('piratestreaure-dropdown');
         if (dropdown) dropdown.style.display = 'none';
 
         fetch('https://shippingmanager.cc/api/vessel/get-all-user-vessels', {

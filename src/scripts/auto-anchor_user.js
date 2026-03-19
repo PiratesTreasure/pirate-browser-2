@@ -1,17 +1,17 @@
 // ==UserScript==
 // @name         ShippingManager - Auto Anchor Points
-// @namespace    https://rebelship.org/
+// @namespace    https://github.com/PiratesTreasure
 // @version      1.49
 // @description  Auto-purchase anchor points when timer expires
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        9
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-start
 // @enabled      false
 // @background-job-required true
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // ==/UserScript==
 /* globals addMenuItem, XMLHttpRequest, Event */
 
@@ -42,7 +42,7 @@
     var processedSliderInputs = new WeakSet();
     var sliderFixTimeout = null;
     var modalEventListeners = [];
-    var rebelshipMenuClickHandler = null;
+    var piratestreaureMenuClickHandler = null;
 
     // ========== THOUSAND SEPARATOR UTILITIES ==========
     function formatNumberWithSeparator(value) {
@@ -192,9 +192,9 @@
 
     // ========== REBELSHIPBRIDGE STORAGE ==========
     async function dbGet(key) {
-        if (!window.RebelShipBridge) return null;
+        if (!window.PiratesTreasureBridge) return null;
         try {
-            var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             if (result) {
                 return JSON.parse(result);
             }
@@ -206,9 +206,9 @@
     }
 
     async function dbSet(key, value) {
-        if (!window.RebelShipBridge) return false;
+        if (!window.PiratesTreasureBridge) return false;
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
             return true;
         } catch (e) {
             log('dbSet error: ' + e, 'error');
@@ -552,9 +552,9 @@
     }
 
     function sendSystemNotification(title, message) {
-        if (typeof window.RebelShipNotify !== 'undefined' && window.RebelShipNotify.notify) {
+        if (typeof window.PiratesTreasureNotify !== 'undefined' && window.PiratesTreasureNotify.notify) {
             try {
-                window.RebelShipNotify.notify(title + ': ' + message);
+                window.PiratesTreasureNotify.notify(title + ': ' + message);
                 return;
             } catch {}
         }
@@ -626,16 +626,16 @@
 
     function setupModalWatcher() {
         // Store listener function, removeEventListener before addEventListener to prevent duplicates
-        if (!rebelshipMenuClickHandler) {
-            rebelshipMenuClickHandler = function() {
+        if (!piratestreaureMenuClickHandler) {
+            piratestreaureMenuClickHandler = function() {
                 if (isModalOpen) {
                     closeModal();
                 }
             };
         } else {
-            window.removeEventListener('rebelship-menu-click', rebelshipMenuClickHandler);
+            window.removeEventListener('piratestreaure-menu-click', piratestreaureMenuClickHandler);
         }
-        window.addEventListener('rebelship-menu-click', rebelshipMenuClickHandler);
+        window.addEventListener('piratestreaure-menu-click', piratestreaureMenuClickHandler);
     }
 
     function openSettingsModal() {
@@ -879,7 +879,7 @@
 
     // ========== INITIALIZATION ==========
     async function initBridge() {
-        if (window.RebelShipBridge) {
+        if (window.PiratesTreasureBridge) {
             await loadSettings();
             await loadPending();
             log('Bridge ready, settings loaded');
@@ -899,7 +899,7 @@
             });
         } else {
             var bridgeObserver = new MutationObserver(function() {
-                if (window.RebelShipBridge) {
+                if (window.PiratesTreasureBridge) {
                     bridgeObserver.disconnect();
                     initBridge();
                 }
@@ -907,8 +907,8 @@
             bridgeObserver.observe(document.documentElement, { childList: true, subtree: true });
             setTimeout(function() {
                 bridgeObserver.disconnect();
-                if (!window.RebelShipBridge) {
-                    log('RebelShipBridge not found after 5 seconds', 'error');
+                if (!window.PiratesTreasureBridge) {
+                    log('PiratesTreasureBridge not found after 5 seconds', 'error');
                 }
             }, 5000);
         }
@@ -934,7 +934,7 @@
         initBridge();
     }
 
-    window.rebelshipRunAutoAnchor = function() {
+    window.piratestreaureRunAutoAnchor = function() {
         return loadSettings().then(function() {
             if (!settings.enabled) {
                 return { skipped: true, reason: 'disabled' };
@@ -943,13 +943,13 @@
         });
     };
 
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         init();
     }
 
-    window.rebelshipBackgroundJobs = window.rebelshipBackgroundJobs || [];
-    window.rebelshipBackgroundJobs.push({
+    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
+    window.piratestreaureBackgroundJobs.push({
         name: 'AutoAnchor',
-        run: function() { return window.rebelshipRunAutoAnchor(); }
+        run: function() { return window.piratestreaureRunAutoAnchor(); }
     });
 })();

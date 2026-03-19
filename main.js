@@ -8,6 +8,16 @@ const { app, BrowserWindow, ipcMain, session, dialog, shell } = require('electro
 const path = require('path');
 const fs   = require('fs');
 
+// ── Auto-updater ──────────────────────────────────────────────
+let autoUpdater = null;
+try {
+  ({ autoUpdater } = require('electron-updater'));
+  autoUpdater.autoDownload    = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+} catch {
+  // electron-updater not available (dev install without it)
+}
+
 // ── Config store ─────────────────────────────────────────────
 let store;
 try {
@@ -205,6 +215,42 @@ ipcMain.handle('scripts:open-folder', () => {
 
 ipcMain.handle('app:version', () => app.getVersion());
 
+// ============================================================
+//  IPC — Auto-updater
+// ============================================================
+ipcMain.handle('updater:check', async () => {
+  if (!autoUpdater) return { error: 'Updater not available' };
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return result ? { updateInfo: result.updateInfo } : { noUpdate: true };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
+ipcMain.handle('updater:download', async () => {
+  if (!autoUpdater) return { error: 'Updater not available' };
+  try {
+    await autoUpdater.downloadUpdate();
+    return { ok: true };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
+ipcMain.handle('updater:install', () => {
+  if (autoUpdater) autoUpdater.quitAndInstall(false, true);
+});
+
+function setupUpdaterEvents() {
+  if (!autoUpdater) return;
+  autoUpdater.on('update-available',    info     => mainWindow?.webContents.send('updater:update-available', info));
+  autoUpdater.on('update-not-available',()       => mainWindow?.webContents.send('updater:no-update'));
+  autoUpdater.on('download-progress',   progress => mainWindow?.webContents.send('updater:progress', progress));
+  autoUpdater.on('update-downloaded',   info     => mainWindow?.webContents.send('updater:downloaded', info));
+  autoUpdater.on('error',               err      => mainWindow?.webContents.send('updater:error', err.message));
+}
+
 // ── Set correct user-agent for a webview partition ───────────
 ipcMain.on('accounts:setup-partition', (_e, { partition }) => {
   const ses = session.fromPartition(partition);
@@ -227,6 +273,11 @@ app.whenReady().then(() => {
     store.set('accounts', [{ id: 'acc-default', label: 'Account 1' }]);
   }
   createMainWindow();
+  setupUpdaterEvents();
+  // Auto-check for updates 5s after launch (production only)
+  if (!isDev && autoUpdater) {
+    setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5000);
+  }
 });
 
 app.on('window-all-closed', () => {

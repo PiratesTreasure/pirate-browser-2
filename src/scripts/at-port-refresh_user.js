@@ -2,7 +2,7 @@
 // @name        ShippingManager - Auto Port Refresh
 // @description Automatically refreshes the port (left side menu) every 30 seconds.
 // @version     1.61
-// @author      https://github.com/justonlyforyou/
+// @author      https://github.com/PiratesTreasure
 // @order        28
 // @match       https://shippingmanager.cc/*
 // @grant       none

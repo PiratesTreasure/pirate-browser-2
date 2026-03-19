@@ -2,13 +2,13 @@
 // @name        ShippingManager - Vessel Sell Cart
 // @description Select and bulk-sell vessels with lazy-loaded sell prices
 // @version     1.11
-// @author      https://github.com/justonlyforyou/
+// @author      https://github.com/PiratesTreasure
 // @order        25
 // @match       https://shippingmanager.cc/*
 // @grant       none
 // @run-at      document-end
 // @enabled     false
-// @RequireRebelShipMenu true
+// @RequirePiratesTreasureMenu true
 // ==/UserScript==
 
 /* global addMenuItem */
@@ -56,7 +56,7 @@
 
     function showNotification(message, type) {
         type = type || 'success';
-        var existing = document.getElementById('rebelship-sell-notification');
+        var existing = document.getElementById('piratestreaure-sell-notification');
         if (existing) existing.remove();
 
         var colors = {
@@ -66,7 +66,7 @@
         };
 
         var notif = document.createElement('div');
-        notif.id = 'rebelship-sell-notification';
+        notif.id = 'piratestreaure-sell-notification';
         notif.textContent = message;
         notif.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:' + colors[type] + ';color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:500;z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.3);animation:rebelSellSlideDown 0.3s ease;';
 
@@ -216,7 +216,7 @@
 
         // Build overlay
         var overlay = document.createElement('div');
-        overlay.id = 'rebelship-sell-overlay';
+        overlay.id = 'piratestreaure-sell-overlay';
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99998;display:flex;align-items:center;justify-content:center;';
 
         var modal = document.createElement('div');
@@ -613,16 +613,16 @@
         processNext();
     }
 
-    // Close sell modal when RebelShip menu is clicked
+    // Close sell modal when PiratesTreasure menu is clicked
     function setupMenuListener() {
-        window.addEventListener('rebelship-menu-click', function() {
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (sellModalOpen) {
                 sellModalOpen = false;
                 if (priceFetchAbort) {
                     priceFetchAbort();
                     priceFetchAbort = null;
                 }
-                var overlay = document.getElementById('rebelship-sell-overlay');
+                var overlay = document.getElementById('piratestreaure-sell-overlay');
                 if (overlay) overlay.remove();
             }
         });

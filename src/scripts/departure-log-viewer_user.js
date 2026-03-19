@@ -1,16 +1,16 @@
 // ==UserScript==
 // @name         ShippingManager - Departure Log Viewer
-// @namespace    https://rebelship.org/
+// @namespace    https://github.com/PiratesTreasure
 // @description  View departure tracking logs from Depart Manager
 // @version      1.27
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        15
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
 // @enabled      false
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // ==/UserScript==
 /* globals addMenuItem */
 
@@ -46,7 +46,7 @@
     // REBELSHIPBRIDGE STORAGE
     // ============================================
     async function dbGet(key) {
-        var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME_BRIDGE, STORE_NAME, key);
+        var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME_BRIDGE, STORE_NAME, key);
         if (result) {
             var parsed = JSON.parse(result);
             if (parsed && parsed.error) {
@@ -1255,7 +1255,7 @@
     }
 
     function waitForBridge() {
-        if (typeof window.RebelShipBridge !== 'undefined' && window.RebelShipBridge.storage) {
+        if (typeof window.PiratesTreasureBridge !== 'undefined' && window.PiratesTreasureBridge.storage) {
             init();
         } else {
             setTimeout(waitForBridge, 500);

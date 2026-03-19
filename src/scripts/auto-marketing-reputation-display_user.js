@@ -2,14 +2,14 @@
 // @name        ShippingManager - Auto Marketing & Reputation Header Display
 // @description Shows reputation in header, auto-renews campaigns when expired with the most expensive possible one.
 // @version     5.35
-// @author      joseywales - Pimped by https://github.com/justonlyforyou/
+// @author      joseywales - Pimped by https://github.com/PiratesTreasure
 // @order        6
 // @match       https://shippingmanager.cc/*
 // @grant       none
 // @run-at      document-end
 // @enabled     false
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // @background-job-required true
 // ==/UserScript==
 /* globals addMenuItem */
@@ -67,10 +67,10 @@
         notifySystem: false
     };
 
-    // ========== RebelShipBridge Storage ==========
+    // ========== PiratesTreasureBridge Storage ==========
     async function dbGet(key) {
         try {
-            var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             if (result) {
                 return JSON.parse(result);
             }
@@ -83,7 +83,7 @@
 
     async function dbSet(key, value) {
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
             return true;
         } catch (e) {
             console.error('[AutoReputation] dbSet error:', e);
@@ -374,9 +374,9 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('rebelship-menu-click', function() {
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (isReputationModalOpen) {
-                log('RebelShip menu clicked, closing modal');
+                log('PiratesTreasure menu clicked, closing modal');
                 closeReputationModal();
             }
         });
@@ -398,9 +398,9 @@
     }
 
     function sendSystemNotification(title, message) {
-        if (typeof window.RebelShipNotify !== 'undefined' && window.RebelShipNotify.notify) {
+        if (typeof window.PiratesTreasureNotify !== 'undefined' && window.PiratesTreasureNotify.notify) {
             try {
-                window.RebelShipNotify.notify(title + ': ' + message);
+                window.PiratesTreasureNotify.notify(title + ': ' + message);
                 return;
             } catch (e) { // eslint-disable-line no-unused-vars
             }
@@ -501,7 +501,7 @@
 
     // ========== UI: SETTINGS MODAL (Custom Game-style) ==========
     function openSettingsModal() {
-        var dropdown = document.getElementById('rebelship-dropdown');
+        var dropdown = document.getElementById('piratestreaure-dropdown');
         if (dropdown) dropdown.style.display = 'none';
 
         // Close any open game modal first
@@ -823,7 +823,7 @@
         }, 1000);
     }
 
-    window.addEventListener('rebelship-header-resize', function() {
+    window.addEventListener('piratestreaure-header-resize', function() {
         if (reputationElement && reputationElement.parentNode) {
             reputationElement.parentNode.removeChild(reputationElement);
         }
@@ -838,7 +838,7 @@
     });
 
     // ========== BACKGROUND JOB ==========
-    window.rebelshipRunAutoMarketing = function() {
+    window.piratestreaureRunAutoMarketing = function() {
         if (!settings.autoRenewalEnabled) {
             return Promise.resolve({ skipped: true, reason: 'disabled' });
         }
@@ -849,14 +849,14 @@
         });
     };
 
-    window.rebelshipBackgroundJobs = window.rebelshipBackgroundJobs || [];
-    window.rebelshipBackgroundJobs.push({
+    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
+    window.piratestreaureBackgroundJobs.push({
         name: 'AutoMarketing',
         interval: 15 * 60 * 1000,
-        run: function() { return window.rebelshipRunAutoMarketing(); }
+        run: function() { return window.piratestreaureRunAutoMarketing(); }
     });
 
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {

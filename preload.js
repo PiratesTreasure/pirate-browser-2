@@ -44,5 +44,14 @@ contextBridge.exposeInMainWorld('pirate', {
   // ── App ───────────────────────────────────────────────────
   app: {
     version: () => ipcRenderer.invoke('app:version'),
+  },
+
+  // ── Updater ───────────────────────────────────────────────
+  updater: {
+    check:     ()  => ipcRenderer.invoke('updater:check'),
+    download:  ()  => ipcRenderer.invoke('updater:download'),
+    install:   ()  => ipcRenderer.invoke('updater:install'),
+    on:        (event, cb) => ipcRenderer.on(event, (_e, data) => cb(data)),
+    off:       (event, cb) => ipcRenderer.off(event, cb),
   }
 });

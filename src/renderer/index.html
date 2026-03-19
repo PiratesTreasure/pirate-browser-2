@@ -158,6 +158,25 @@ html, body {
 }
 #add-tab-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
 
+/* ── Bunker fixed tab ────────────────────────────────────── */
+#bunker-tab {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 16px;
+  height: 100%; background: transparent; border: none;
+  cursor: pointer; color: var(--text-secondary);
+  font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s; white-space: nowrap;
+  border-radius: var(--radius) var(--radius) 0 0;
+  margin-top: 4px; flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+#bunker-tab:hover { background: var(--bg-hover); color: #4a9eff; }
+#bunker-tab.active { background: var(--bg-panel); color: #4a9eff; border-bottom-color: #4a9eff; }
+#bunker-tab.active .bunker-dot { background: #4a9eff; box-shadow: 0 0 6px #4a9eff; }
+.bunker-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; transition: all 0.15s; }
+.tabs-divider { width: 1px; height: 24px; background: var(--border); margin: auto 4px; flex-shrink: 0; }
+
 /* ── Toolbar ─────────────────────────────────────────────── */
 #toolbar {
   display: flex; align-items: center;
@@ -196,6 +215,86 @@ html, body {
 }
 .toolbar-btn:hover,
 .toolbar-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+
+/* ── Tools dropdown in toolbar ── */
+.tools-drop { position: relative; flex-shrink: 0; }
+.tools-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  z-index: 500;
+  display: none;
+  overflow: hidden;
+}
+.tools-menu.open { display: block; }
+.tools-menu-hdr {
+  padding: 7px 12px 5px;
+  font-size: 10px; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.tools-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+  color: var(--text-primary); font-size: 12px;
+}
+.tools-menu-item:last-child { border-bottom: none; }
+.tools-menu-item:hover { background: var(--bg-hover); color: var(--accent); }
+.tools-menu-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); flex-shrink: 0;
+}
+.tools-menu-sub-hdr {
+  padding: 5px 12px 4px;
+  font-size: 9px; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+.tools-menu-sub-item {
+  display: flex; align-items: center;
+  padding: 7px 14px 7px 26px; cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+  color: var(--text-secondary); font-size: 11px;
+}
+.tools-menu-sub-item:last-child { border-bottom: none; }
+.tools-menu-sub-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.tools-empty {
+  padding: 14px; text-align: center;
+  color: var(--text-muted); font-size: 11px;
+}
+
+/* ── Account info in toolbar ── */
+.acct-info {
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0;
+}
+.acct-chip {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px;
+}
+.acct-lbl {
+  color: var(--text-muted);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+}
+.acct-val { font-weight: 600; font-size: 12px; color: var(--text-primary); }
+.acct-val.gold  { color: var(--accent); }
+.acct-val.green { color: var(--green); }
+.acct-val.blue  { color: var(--blue); }
+.acct-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-muted); flex-shrink: 0;
+}
+.acct-dot.online { background: var(--green); box-shadow: 0 0 5px var(--green); }
 .badge {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px;
@@ -205,6 +304,11 @@ html, body {
 }
 
 /* ── Webview container ───────────────────────────────────── */
+@keyframes pulse-update {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:0.85; transform:scale(1.03); }
+}
+
 #webview-container {
   flex: 1;
   position: relative;
@@ -452,6 +556,9 @@ webview.active { display: flex; }
       <div class="status-dot" id="status-dot"></div>
       <span id="status-text">connecting...</span>
     </div>
+    <button id="update-btn" onclick="openUpdateModal()" style="display:none;margin-right:8px;padding:4px 12px;background:linear-gradient(135deg,#e8912a,#c4710e);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:11px;font-weight:700;font-family:inherit;letter-spacing:0.5px;animation:pulse-update 2s infinite;" title="Update available!">
+      ⬆ UPDATE
+    </button>
     <div class="window-controls">
       <button class="wc-btn" onclick="window.pirate.window.minimize()">
         <svg width="12" height="2" viewBox="0 0 12 2"><rect width="12" height="2" rx="1" fill="currentColor"/></svg>
@@ -468,6 +575,11 @@ webview.active { display: flex; }
   <!-- TABS BAR -->
   <div id="tabs-bar">
     <button id="add-tab-btn" title="Add Account" onclick="openAddModal()">+</button>
+    <div class="tabs-divider"></div>
+    <button id="bunker-tab" onclick="switchToBunker()">
+      <div class="bunker-dot"></div>
+      🏴‍☠️ Pirate Bunker
+    </button>
   </div>
 
   <!-- TOOLBAR -->
@@ -480,6 +592,16 @@ webview.active { display: flex; }
     </button>
     <input class="url-bar" id="url-bar" type="text" placeholder="https://shippingmanager.cc"
       onkeydown="if(event.key==='Enter') navGo()">
+    <button class="nav-btn" onclick="reloadWithScripts()" title="Reload page & inject scripts" style="color:var(--green);border-color:var(--green)">
+      <svg width="14" height="14" viewBox="0 0 14 14"><path d="M12 7A5 5 0 112 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M12 3v4h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/></svg>
+    </button>
+    <div class="toolbar-div"></div>
+    <div class="tools-drop" id="tools-drop">
+      <button class="toolbar-btn" id="tools-btn" onclick="toggleToolsMenu()">
+        ⚙ Tools <span class="badge" id="tools-count" style="background:var(--bg-hover);color:var(--text-muted)">0</span>
+      </button>
+      <div class="tools-menu" id="tools-menu"></div>
+    </div>
     <div class="toolbar-div"></div>
     <button class="toolbar-btn" id="scripts-btn" onclick="togglePanel()">
       <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 4h10M2 7h7M2 10h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -499,6 +621,8 @@ webview.active { display: flex; }
       <p>Loading ShippingManager...</p>
     </div>
     <!-- webview tags injected here by JS -->
+    <!-- Fixed Bunker webview -->
+    <webview id="wv-bunker" src="https://piratebunker.netlify.app/" style="position:absolute;inset:0;width:100%;height:100%;border:none;display:none;"></webview>
   </div>
 
 </div><!-- #app -->
@@ -521,6 +645,32 @@ webview.active { display: flex; }
     <input type="text" id="search-input" placeholder="Search scripts..." oninput="filterScripts(this.value)">
   </div>
   <div id="scripts-list"></div>
+</div>
+
+<!-- UPDATE MODAL -->
+<div class="modal-overlay" id="update-modal" onclick="closeUpdateModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:none;align-items:center;justify-content:center;">
+  <div style="background:#0d1117;border:1px solid #1e2d42;border-radius:10px;width:520px;max-width:90vw;font-family:Inter,-apple-system,sans-serif;overflow:hidden;">
+    <div style="padding:20px 24px 0;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+        <span style="font-size:22px;">🏴‍☠️</span>
+        <div>
+          <div style="font-family:'Bebas Neue',Impact,sans-serif;font-size:22px;letter-spacing:2px;color:#e8912a;">NEW UPDATE AVAILABLE</div>
+          <div id="update-version-line" style="font-size:12px;color:#7a90a8;"></div>
+        </div>
+      </div>
+    </div>
+    <div id="update-notes" style="padding:16px 24px;max-height:280px;overflow-y:auto;font-size:13px;color:#e2e8f0;line-height:1.6;border-top:1px solid #1e2d42;margin-top:12px;white-space:pre-wrap;"></div>
+    <div id="update-progress-wrap" style="display:none;padding:0 24px 8px;">
+      <div style="background:#1e2d42;border-radius:4px;height:6px;overflow:hidden;">
+        <div id="update-progress-bar" style="height:100%;background:#e8912a;width:0%;transition:width 0.3s;border-radius:4px;"></div>
+      </div>
+      <div id="update-progress-text" style="font-size:11px;color:#7a90a8;margin-top:4px;text-align:center;"></div>
+    </div>
+    <div style="padding:16px 24px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #1e2d42;">
+      <button onclick="closeUpdateModal()" style="padding:8px 16px;background:transparent;border:1px solid #253347;border-radius:6px;color:#7a90a8;cursor:pointer;font-size:13px;font-family:inherit;">Later</button>
+      <button id="update-action-btn" onclick="startUpdate()" style="padding:8px 20px;background:linear-gradient(135deg,#e8912a,#c4710e);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;">Download & Install</button>
+    </div>
+  </div>
 </div>
 
 <!-- ADD ACCOUNT MODAL -->
@@ -549,10 +699,14 @@ const TARGET = 'https://shippingmanager.cc';
 let activeId    = null;
 let allScripts  = [];
 let filterText  = '';
-let panelOpen   = false;
+let panelOpen    = false;
+let bunkerActive = false;
 
 // webviews map: accountId → <webview> element
 const webviews = new Map();
+
+// Track which webviews are ready
+const webviewReady = new Map();
 
 // ── Boot ─────────────────────────────────────────────────────
 async function init() {
@@ -567,7 +721,14 @@ async function init() {
   }
 
   if (accounts.length > 0) {
-    switchTo(accounts[0].id);
+    // Wait for first webview dom-ready before switching
+    const firstId = accounts[0].id;
+    const firstWv = webviews.get(firstId);
+    if (firstWv && !webviewReady.get(firstId)) {
+      firstWv.addEventListener('dom-ready', () => switchTo(firstId), { once: true });
+    } else {
+      switchTo(firstId);
+    }
   }
 
   setTimeout(() => setStatus(true), 1500);
@@ -587,29 +748,72 @@ function createWebview(id) {
     'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
   wv.setAttribute('allowpopups', 'false');
   wv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;display:none;';
+  wv._pendingInject = false;
 
-  // Hide loading overlay once first webview loads
+  // Mark ready on dom-ready
+  wv.addEventListener('dom-ready', () => {
+    webviewReady.set(id, true);
+  });
+
+  // Handle page load - inject scripts if enabled
   wv.addEventListener('did-finish-load', async () => {
     const url = wv.getURL();
-    document.getElementById('url-bar').value = url;
+    if (id === activeId) {
+      document.getElementById('url-bar').value = url;
+    }
     setStatus(true);
 
     // Hide loading overlay
     const overlay = document.getElementById('loading-overlay');
     if (overlay) overlay.classList.add('hidden');
 
-    // Inject enabled scripts
+    // Inject enabled scripts (always inject on load, handles both first load and reloads)
     if (url.startsWith(TARGET)) {
+      // Wait for the page app to fully initialise before injecting
+      await new Promise(r => setTimeout(r, 1500));
+
+      // Re-check webview is still valid after the wait
+      try { if (!wv.getURL().startsWith(TARGET)) return; } catch { return; }
+
       const scripts = await window.pirate.scripts.getAllEnabled(id);
-      for (const s of scripts) {
-        try { wv.executeJavaScript(s.src); } catch {}
+
+      // Inject all scripts as a single concatenated block inside the page context
+      // This ensures window is shared between all scripts
+      const allSrc = scripts.map(s => {
+        return `/* === ${s.filename} === */\ntry {\n${s.src}\n} catch(e) { console.error('[PirateBrowser] ${s.filename}:', e.message); }`;
+      }).join('\n\n');
+
+      if (allSrc) {
+        for (const s of scripts) {
+          try {
+            await wv.executeJavaScript(s.src);
+          } catch (e2) {
+            console.error('[inject]', s.filename, e2.message);
+          }
+        }
       }
+    }
+    wv._pendingInject = false;
+  });
+
+  wv.addEventListener('did-start-loading', () => {
+    if (id === activeId) {
+      document.getElementById('url-bar').style.opacity = '0.5';
+    }
+  });
+
+  wv.addEventListener('did-stop-loading', () => {
+    if (id === activeId) {
+      document.getElementById('url-bar').style.opacity = '1';
     }
   });
 
   wv.addEventListener('did-navigate', () => {
     if (id === activeId) {
-      document.getElementById('url-bar').value = wv.getURL();
+      let url;
+      try { url = wv.getURL(); } catch(e) {}
+      if (url) document.getElementById('url-bar').value = url;
+      document.getElementById('url-bar').style.opacity = '1';
     }
   });
 
@@ -624,8 +828,32 @@ function createWebview(id) {
   return wv;
 }
 
+function switchToBunker() {
+  // Hide all account webviews
+  for (const wv of webviews.values()) {
+    wv.style.display = 'none';
+    wv.classList.remove('active');
+  }
+  // Show bunker
+  const bwv = document.getElementById('wv-bunker');
+  bwv.style.display = 'flex';
+  document.getElementById('url-bar').value = 'https://piratebunker.netlify.app/';
+  // Update tabs
+  document.querySelectorAll('.account-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('bunker-tab').classList.add('active');
+  bunkerActive = true;
+  activeId = null;
+  // Hide scripts panel - not applicable for bunker
+  if (panelOpen) togglePanel();
+}
+
 function switchTo(id) {
-  // Hide all webviews
+  // Hide bunker
+  const bwv = document.getElementById('wv-bunker');
+  if (bwv) bwv.style.display = 'none';
+  document.getElementById('bunker-tab').classList.remove('active');
+  bunkerActive = false;
+  // Hide all account webviews
   for (const [vid, wv] of webviews) {
     wv.style.display = 'none';
     wv.classList.remove('active');
@@ -635,7 +863,12 @@ function switchTo(id) {
   if (wv) {
     wv.style.display = 'flex';
     wv.classList.add('active');
-    document.getElementById('url-bar').value = wv.getURL() || TARGET;
+    try {
+      const url = wv.getURL();
+      document.getElementById('url-bar').value = url || TARGET;
+    } catch (e) {
+      document.getElementById('url-bar').value = TARGET;
+    }
   }
   // Update tabs
   document.querySelectorAll('.account-tab').forEach(t =>
@@ -713,11 +946,39 @@ async function confirmAdd() {
 
 // ── Navigation ────────────────────────────────────────────────
 function navBack()   { webviews.get(activeId)?.goBack(); }
-function navReload() { webviews.get(activeId)?.reload(); }
+// ── Webview navigation helper ─────────────────────────────────
+function wvLoad(wv, url) {
+  if (!wv) return;
+  try {
+    // Try loadURL first (preferred)
+    if (typeof wv.loadURL === 'function') {
+      wv.loadURL(url);
+    } else {
+      // Fallback: set src attribute
+      wv.src = url;
+    }
+  } catch (e) {
+    console.error('[wvLoad] error:', e.message);
+    wv.src = url;
+  }
+}
+
+function navReload() {
+  const wv = webviews.get(activeId);
+  if (!wv || !webviewReady.get(activeId)) return;
+  let url;
+  try { url = wv.getURL(); } catch (e) { url = null; }
+  wvLoad(wv, url || TARGET);
+}
+function reloadWithScripts() {
+  if (!activeId) return;
+  reloadAndInject(activeId);
+  toast('Reloading & injecting scripts...', 'i');
+}
 function navGo() {
   let url = document.getElementById('url-bar').value.trim();
   if (!url.startsWith('http')) url = 'https://' + url;
-  webviews.get(activeId)?.loadURL(url);
+  wvLoad(webviews.get(activeId), url);
 }
 
 // ── Scripts panel ─────────────────────────────────────────────
@@ -778,41 +1039,62 @@ function filterScripts(v) {
   renderScripts(v);
 }
 
+// ── Reload page then re-inject all enabled scripts ───────────
+async function reloadAndInject(accountId) {
+  const wv = webviews.get(accountId);
+  if (!wv || !webviewReady.get(accountId)) return;
+  wv._pendingInject = true;
+  let url;
+  try { url = wv.getURL(); } catch (e) { url = null; }
+  wvLoad(wv, url || TARGET);
+}
+
 async function toggleScript(filename, enabled) {
   if (!activeId) return;
-  await window.pirate.scripts.toggle(activeId, filename, enabled);
   const s = allScripts.find(x => x.filename === filename);
+  const name = s ? s.name.replace(/^ShippingManager\s*[-–]\s*/i, '') : filename;
+
+  // Confirm before activating
+  if (enabled) {
+    const confirmed = await showConfirm(
+      `Enable "${name}"?`,
+      `This script will activate and the page will reload.`
+    );
+    if (!confirmed) {
+      // Revert the checkbox visually
+      const cb = document.querySelector(`.script-item[data-fn="${filename}"] input[type=checkbox]`);
+      if (cb) cb.checked = false;
+      return;
+    }
+  }
+
+  await window.pirate.scripts.toggle(activeId, filename, enabled);
   if (s) s.enabled = enabled;
   document.querySelector(`.script-item[data-fn="${filename}"]`)
     ?.classList.toggle('on', enabled);
 
-  // Inject immediately if enabling
-  if (enabled) {
-    const wv = webviews.get(activeId);
-    const scripts = await window.pirate.scripts.getAllEnabled(activeId);
-    const sc = scripts.find(x => x.filename === filename);
-    if (wv && sc) { try { wv.executeJavaScript(sc.src); } catch {} }
-  }
+  await reloadAndInject(activeId);
   updateBadge();
+  toast((enabled ? 'Enabled' : 'Disabled') + ': ' + name, enabled ? 's' : 'i');
 }
 
 async function enableAll() {
   if (!activeId) return;
+  const confirmed = await showConfirm('Enable all scripts?', 'All scripts will activate and the page will reload.');
+  if (!confirmed) return;
   await window.pirate.scripts.toggleAll(activeId, true);
   await loadScripts(activeId);
-  // Re-inject all
-  const wv = webviews.get(activeId);
-  if (wv) {
-    const scripts = await window.pirate.scripts.getAllEnabled(activeId);
-    for (const s of scripts) { try { wv.executeJavaScript(s.src); } catch {} }
-  }
+  await reloadAndInject(activeId);
   toast('All scripts enabled', 's');
 }
 
 async function disableAll() {
   if (!activeId) return;
+  const confirmed = await showConfirm('Disable all scripts?', 'All scripts will be turned off and the page will reload.');
+  if (!confirmed) return;
   await window.pirate.scripts.toggleAll(activeId, false);
   await loadScripts(activeId);
+  await reloadAndInject(activeId);
   toast('All scripts disabled', 'i');
 }
 
@@ -854,8 +1136,280 @@ function toast(msg, type = 'i') {
   setTimeout(() => el.remove(), 2800);
 }
 
+// ── Confirm dialog ───────────────────────────────────────────
+function showConfirm(title, message) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay visible';
+    overlay.style.zIndex = '2000';
+    overlay.innerHTML = `
+      <div class="modal">
+        <div class="modal-title" style="font-size:18px">${title}</div>
+        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;line-height:1.5">${message}</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="confirm-cancel">Cancel</button>
+          <button class="btn-primary" id="confirm-ok">Confirm & Reload</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#confirm-ok').onclick = () => { overlay.remove(); resolve(true); };
+    overlay.querySelector('#confirm-cancel').onclick = () => { overlay.remove(); resolve(false); };
+  });
+}
+
+// ── Account info polling from webview ────────────────────────
+async function pollAccountInfo() {
+  if (!activeId) return;
+  const wv = webviews.get(activeId);
+  if (!wv || !webviewReady.get(activeId)) return;
+  try {
+    const data = await wv.executeJavaScript(`
+      (function() {
+        try {
+          return {
+            username: (document.querySelector('.user-name, .username, .player-name, a[href*="/profile/"]') || {}).textContent?.trim() || null,
+            company:  (document.querySelector('.company-name, .company, [data-company]') || {}).textContent?.trim() || null,
+            balance:  (document.querySelector('.balance, .money, .cash, [data-balance]') || {}).textContent?.trim() || null,
+            rank:     (document.querySelector('.rank, .player-rank, [data-rank]') || {}).textContent?.trim() || null,
+          };
+        } catch(e) { return null; }
+      })()
+    `);
+    if (!data) return;
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || '—'; };
+    set('acct-user',    data.username);
+    set('acct-company', data.company);
+    set('acct-balance', data.balance);
+    set('acct-rank',    data.rank);
+    const dot = document.getElementById('acct-dot');
+    if (dot) dot.className = 'acct-dot' + (data.username ? ' online' : '');
+  } catch(e) {}
+}
+
+setInterval(pollAccountInfo, 3000);
+
+// ── Tools dropdown ───────────────────────────────────────────
+let toolsOpen = false;
+
+function toggleToolsMenu() {
+  toolsOpen = !toolsOpen;
+  document.getElementById('tools-menu').classList.toggle('open', toolsOpen);
+  document.getElementById('tools-btn').classList.toggle('active', toolsOpen);
+  if (toolsOpen) renderToolsMenu();
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#tools-drop')) {
+    toolsOpen = false;
+    document.getElementById('tools-menu')?.classList.remove('open');
+    document.getElementById('tools-btn')?.classList.remove('active');
+  }
+});
+
+function renderToolsMenu() {
+  const menu   = document.getElementById('tools-menu');
+  const count  = document.getElementById('tools-count');
+  const items  = window._pirateMenuItems  || [];
+  const subs   = window._pirateSubMenus   || [];
+  const total  = items.length + subs.length;
+
+  if (count) count.textContent = total;
+
+  menu.innerHTML = '';
+
+  if (total === 0) {
+    menu.innerHTML = '<div class="tools-empty">Enable scripts to see tools here</div>';
+    return;
+  }
+
+  if (items.length) {
+    menu.innerHTML += '<div class="tools-menu-hdr">Script Tools</div>';
+    for (const item of items) {
+      const el = document.createElement('div');
+      el.className = 'tools-menu-item';
+      el.innerHTML = `<div class="tools-menu-dot"></div>${item.label}`;
+      el.onclick = () => {
+        toggleToolsMenu();
+        try { item.callback(); } catch(e) { console.error('[Tools]', e); }
+      };
+      menu.appendChild(el);
+    }
+  }
+
+  for (const sub of subs) {
+    const hdr = document.createElement('div');
+    hdr.className = 'tools-menu-sub-hdr';
+    hdr.textContent = sub.label;
+    menu.appendChild(hdr);
+    for (const si of (sub.items || [])) {
+      const el = document.createElement('div');
+      el.className = 'tools-menu-sub-item';
+      el.textContent = si.label || si.name || '';
+      const fn = si.fn || si.callback || si.onClick;
+      if (fn) el.onclick = () => { toggleToolsMenu(); try { fn(); } catch(e) {} };
+      menu.appendChild(el);
+    }
+  }
+}
+
+// Listen for scripts registering new menu items
+function setupToolsListener() {
+  const wv = webviews.get(activeId);
+  if (!wv) return;
+  // Poll the webview for registered menu items every 2s
+  setInterval(async () => {
+    if (!activeId || !webviewReady.get(activeId)) return;
+    const wv = webviews.get(activeId);
+    if (!wv) return;
+    try {
+      const data = await wv.executeJavaScript(`
+        ({
+          items: (window._pirateMenuItems || []).map(i => ({ label: i.label })),
+          subs:  (window._pirateSubMenus  || []).map(s => ({
+            label: s.label,
+            items: (s.items || []).map(i => ({ label: i.label || i.name || '' }))
+          }))
+        })
+      `);
+      // Sync into renderer window so renderToolsMenu can use them
+      window._pirateMenuItems = data.items.map(i => ({
+        label: i.label,
+        callback: async () => {
+          const wv = webviews.get(activeId);
+          if (wv) await wv.executeJavaScript(
+            `(window._pirateMenuItems.find(x=>x.label===${JSON.stringify(i.label)})||{callback:()=>{}}).callback()`
+          );
+        }
+      }));
+      window._pirateSubMenus = data.subs.map(s => ({
+        label: s.label,
+        items: s.items.map(si => ({
+          label: si.label,
+          fn: async () => {
+            const wv = webviews.get(activeId);
+            if (wv) await wv.executeJavaScript(
+              `(function(){var s=(window._pirateSubMenus||[]).find(x=>x.label===${JSON.stringify(s.label)});var i=s&&(s.items||[]).find(x=>(x.label||x.name)===${JSON.stringify(si.label)});var fn=i&&(i.fn||i.callback||i.onClick);if(fn)fn();})()`
+            );
+          }
+        }))
+      }));
+      const total = data.items.length + data.subs.length;
+      const countEl = document.getElementById('tools-count');
+      if (countEl) countEl.textContent = total;
+    } catch(e) {}
+  }, 2000);
+}
+
 // ── Start ─────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => { init(); setTimeout(setupToolsListener, 3000); initUpdater(); });
+
+// ── Auto-updater UI ───────────────────────────────────────────
+let updateReady = false;
+
+function initUpdater() {
+  if (!window.pirate.updater) return;
+
+  window.pirate.updater.on('updater:update-available', (info) => {
+    showUpdateModal(info);
+  });
+
+  window.pirate.updater.on('updater:no-update', () => {
+    // silently ignore - no notification needed
+  });
+
+  window.pirate.updater.on('updater:progress', (progress) => {
+    const wrap = document.getElementById('update-progress-wrap');
+    const bar  = document.getElementById('update-progress-bar');
+    const txt  = document.getElementById('update-progress-text');
+    if (wrap) wrap.style.display = 'block';
+    if (bar)  bar.style.width = (progress.percent || 0).toFixed(1) + '%';
+    if (txt)  txt.textContent = `Downloading... ${(progress.percent || 0).toFixed(0)}%  (${((progress.bytesPerSecond || 0) / 1024 / 1024).toFixed(1)} MB/s)`;
+  });
+
+  window.pirate.updater.on('updater:downloaded', (info) => {
+    updateReady = true;
+    const btn = document.getElementById('update-action-btn');
+    if (btn) {
+      btn.textContent = '🚀 Restart & Install';
+      btn.onclick = () => window.pirate.updater.install();
+    }
+    const txt = document.getElementById('update-progress-text');
+    if (txt) txt.textContent = 'Download complete — click to restart and install.';
+    const modal = document.getElementById('update-modal');
+    if (modal) modal.style.display = 'flex';
+  });
+
+  window.pirate.updater.on('updater:error', (msg) => {
+    const btn = document.getElementById('update-action-btn');
+    if (btn) { btn.textContent = 'Retry'; btn.onclick = () => startUpdate(); }
+    const notes = document.getElementById('update-notes');
+    if (notes) notes.textContent = '⚠ Update error: ' + msg;
+  });
+}
+
+function showUpdateModal(info) {
+  const modal = document.getElementById('update-modal');
+  if (!modal) return;
+
+  const ver = document.getElementById('update-version-line');
+  if (ver) {
+    const current = document.getElementById('app-version')?.textContent || '';
+    ver.textContent = current + '  →  v' + info.version;
+  }
+
+  // Parse release notes - GitHub releases use markdown
+  const notes = document.getElementById('update-notes');
+  if (notes) {
+    const raw = info.releaseNotes || info.releaseName || 'No patch notes provided.';
+    // Strip HTML tags if present, keep line breaks readable
+    notes.textContent = typeof raw === 'string'
+      ? raw.replace(/<[^>]+>/g, '').trim()
+      : JSON.stringify(raw, null, 2);
+  }
+
+  // Reset progress
+  const wrap = document.getElementById('update-progress-wrap');
+  if (wrap) wrap.style.display = 'none';
+  const btn = document.getElementById('update-action-btn');
+  if (btn) { btn.textContent = 'Download & Install'; btn.onclick = startUpdate; }
+
+  modal.style.display = 'flex';
+
+  // Show persistent button in titlebar
+  const updateBtn = document.getElementById('update-btn');
+  if (updateBtn) updateBtn.style.display = 'block';
+}
+
+function openUpdateModal() {
+  const modal = document.getElementById('update-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeUpdateModal(e) {
+  if (e && e.target !== document.getElementById('update-modal')) return;
+  const modal = document.getElementById('update-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function startUpdate() {
+  const btn = document.getElementById('update-action-btn');
+  if (btn) { btn.textContent = 'Downloading...'; btn.disabled = true; }
+  const result = await window.pirate.updater.download();
+  if (result && result.error) {
+    if (btn) { btn.textContent = 'Retry'; btn.disabled = false; }
+    const notes = document.getElementById('update-notes');
+    if (notes) notes.textContent += '\n\n⚠ ' + result.error;
+  }
+}
+
+// Manual check from settings or menu
+async function checkForUpdates() {
+  toast('Checking for updates...', 'i');
+  const result = await window.pirate.updater.check();
+  if (result.noUpdate) toast('You are on the latest version.', 'i');
+  else if (result.error) toast('Update check failed: ' + result.error, 'e');
+  // update-available event fires automatically if found
+}
 </script>
 </body>
 </html>

@@ -3,15 +3,15 @@
 // @namespace    http://tampermonkey.net/
 // @description  Automatically buys Employee Workshop from the shop when crew or management morale drops below target. NOT MIX WITH NO-POINTS EDITION!
 // @version      1.31
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        6
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
 // @enabled      false
 // @background-job-required true
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // ==/UserScript==
 /* globals addMenuItem */
 
@@ -58,12 +58,12 @@
     var isRunning = false;
 
     // ============================================
-    // RebelShipBridge Storage Functions
+    // PiratesTreasureBridge Storage Functions
     // ============================================
 
     async function dbGet(key) {
         try {
-            var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             if (result) {
                 return JSON.parse(result);
             }
@@ -76,7 +76,7 @@
 
     async function dbSet(key, value) {
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
             return true;
         } catch (e) {
             console.error(LOG_PREFIX, 'dbSet error:', e);
@@ -424,9 +424,9 @@
             return;
         }
 
-        if (typeof window.RebelShipNotify !== 'undefined' && window.RebelShipNotify.notify) {
+        if (typeof window.PiratesTreasureNotify !== 'undefined' && window.PiratesTreasureNotify.notify) {
             try {
-                window.RebelShipNotify.notify(SCRIPT_NAME + ': ' + message);
+                window.PiratesTreasureNotify.notify(SCRIPT_NAME + ': ' + message);
                 console.log(LOG_PREFIX, 'System notification sent');
                 return;
             } catch (e) {
@@ -747,12 +747,12 @@
 
         menuClickListener = function() {
             if (isModalOpen) {
-                console.log(LOG_PREFIX, 'RebelShip menu clicked, closing modal');
+                console.log(LOG_PREFIX, 'PiratesTreasure menu clicked, closing modal');
                 closeModal();
             }
         };
 
-        window.addEventListener('rebelship-menu-click', menuClickListener);
+        window.addEventListener('piratestreaure-menu-click', menuClickListener);
     }
 
     function openSettingsModal() {
@@ -1055,12 +1055,12 @@
         removeModalStyles();
 
         if (menuClickListener) {
-            window.removeEventListener('rebelship-menu-click', menuClickListener);
+            window.removeEventListener('piratestreaure-menu-click', menuClickListener);
             menuClickListener = null;
         }
 
         if (headerResizeListener) {
-            window.removeEventListener('rebelship-header-resize', headerResizeListener);
+            window.removeEventListener('piratestreaure-header-resize', headerResizeListener);
             headerResizeListener = null;
         }
 
@@ -1077,7 +1077,7 @@
     }
 
     // Expose for Android BackgroundScriptService
-    window.rebelshipRunAutoHappyStaffByPoints = async function() {
+    window.piratestreaureRunAutoHappyStaffByPoints = async function() {
         var settings = loadSettings();
         if (!settings.enabled) {
             return { skipped: true, reason: 'disabled' };
@@ -1087,7 +1087,7 @@
     };
 
     // Expose cleanup for manual cleanup
-    window.rebelshipCleanupAutoHappyStaffByPoints = cleanup;
+    window.piratestreaureCleanupAutoHappyStaffByPoints = cleanup;
 
     // Listen for header resize event to reinitialize display
     headerResizeListener = function() {
@@ -1104,9 +1104,9 @@
         }, 300);
     };
 
-    window.addEventListener('rebelship-header-resize', headerResizeListener);
+    window.addEventListener('piratestreaure-header-resize', headerResizeListener);
 
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -1115,9 +1115,9 @@
     }
 
     // Register for background job system
-    window.rebelshipBackgroundJobs = window.rebelshipBackgroundJobs || [];
-    window.rebelshipBackgroundJobs.push({
+    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
+    window.piratestreaureBackgroundJobs.push({
         name: 'AutoHappyStaffByPoints',
-        run: async function() { return await window.rebelshipRunAutoHappyStaffByPoints(); }
+        run: async function() { return await window.piratestreaureRunAutoHappyStaffByPoints(); }
     });
 })();

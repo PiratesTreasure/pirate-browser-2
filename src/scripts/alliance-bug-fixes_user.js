@@ -2,7 +2,7 @@
 // @name        ShippingManager - Alliance Tools
 // @description Alliance ID display, interim CEO edit buttons, member exclude for management/COO
 // @version     1.21
-// @author      https://github.com/justonlyforyou/
+// @author      https://github.com/PiratesTreasure
 // @order        18
 // @match       https://shippingmanager.cc/*
 // @grant       none

@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         ShippingManager - Game Bug-Using: Fast Delivery for built vessels
-// @namespace    https://rebelship.org/
+// @namespace    https://github.com/PiratesTreasure
 // @version      1.18
 // @description  Fast delivery for built vessels via drydock exploit. Sends pending vessels in drydock, for resetting the delivery time with the maintenance end ;)
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        22
 // @match        https://shippingmanager.cc/*
 // @grant        none

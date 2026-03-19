@@ -1,15 +1,15 @@
 // ==UserScript==
 // @name         ShippingManager - Demand Summary
-// @namespace    https://rebelship.org/
+// @namespace    https://github.com/PiratesTreasure
 // @description  Demand & ranking dashboard with map tooltips, CSV export, and route-popup demand/vessel filters
 // @version      5.16
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        10
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // @enabled      false
 // ==/UserScript==
 
@@ -31,17 +31,17 @@
 
     async function dbGet(key, retryCount) {
         retryCount = retryCount || 0;
-        if (!window.RebelShipBridge) {
-            console.error('[' + SCRIPT_NAME + '] FATAL: RebelShipBridge not found!');
+        if (!window.PiratesTreasureBridge) {
+            console.error('[' + SCRIPT_NAME + '] FATAL: PiratesTreasureBridge not found!');
             return null;
         }
-        if (!window.RebelShipBridge.storage) {
-            console.error('[' + SCRIPT_NAME + '] FATAL: RebelShipBridge.storage not found!');
+        if (!window.PiratesTreasureBridge.storage) {
+            console.error('[' + SCRIPT_NAME + '] FATAL: PiratesTreasureBridge.storage not found!');
             return null;
         }
         try {
             console.log('[' + SCRIPT_NAME + '] dbGet(' + key + ') calling storage.get...');
-            var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             console.log('[' + SCRIPT_NAME + '] dbGet(' + key + ') raw result: ' + (result ? result.substring(0, 100) + '...' : 'NULL'));
             if (result) {
                 var parsed = JSON.parse(result);
@@ -65,21 +65,21 @@
 
     async function dbSet(key, value, retryCount) {
         retryCount = retryCount || 0;
-        if (!window.RebelShipBridge) {
-            console.error('[' + SCRIPT_NAME + '] FATAL: RebelShipBridge not found for SET!');
+        if (!window.PiratesTreasureBridge) {
+            console.error('[' + SCRIPT_NAME + '] FATAL: PiratesTreasureBridge not found for SET!');
             return false;
         }
-        if (!window.RebelShipBridge.storage) {
-            console.error('[' + SCRIPT_NAME + '] FATAL: RebelShipBridge.storage not found for SET!');
+        if (!window.PiratesTreasureBridge.storage) {
+            console.error('[' + SCRIPT_NAME + '] FATAL: PiratesTreasureBridge.storage not found for SET!');
             return false;
         }
         try {
             var jsonStr = JSON.stringify(value);
             console.log('[' + SCRIPT_NAME + '] dbSet(' + key + ') size=' + jsonStr.length + ' bytes');
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, jsonStr);
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, jsonStr);
             console.log('[' + SCRIPT_NAME + '] dbSet(' + key + ') SUCCESS');
             // VERIFY: Read back immediately
-            var verify = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var verify = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             if (verify) {
                 console.log('[' + SCRIPT_NAME + '] dbSet(' + key + ') VERIFIED - data persisted');
             } else {
@@ -808,9 +808,9 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('rebelship-menu-click', function() {
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (isDemandModalOpen) {
-                log('RebelShip menu clicked, closing modal');
+                log('PiratesTreasure menu clicked, closing modal');
                 closeDemandModal();
             }
         });
@@ -1199,7 +1199,7 @@
         const cooldownRemaining = getTimeUntilNextCollect();
         const vesselsByDest = getVesselsByDestinationWithFallback();
 
-        let html = '<div id="demand-summary-wrapper" data-rebelship-modal="demand-summary" style="padding:8px 2px;font-family:Lato,sans-serif;color:#01125d;height:100%;display:flex;flex-direction:column;box-sizing:border-box;">';
+        let html = '<div id="demand-summary-wrapper" data-piratestreaure-modal="demand-summary" style="padding:8px 2px;font-family:Lato,sans-serif;color:#01125d;height:100%;display:flex;flex-direction:column;box-sizing:border-box;">';
 
         // Header with last collect times
         const rankings = loadRankingCacheSync();

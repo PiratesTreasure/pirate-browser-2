@@ -1,15 +1,15 @@
 // ==UserScript==
 // @name         ShippingManager - Cleanup System Messages
-// @namespace    https://rebelship.org/
+// @namespace    https://github.com/PiratesTreasure
 // @version      1.01
 // @description  Bulk delete alliance join and donation system messages from your inbox
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        997
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
 // @enabled      false
-// @RequireRebelShipMenu true
+// @RequirePiratesTreasureMenu true
 // ==/UserScript==
 /* globals addSubMenu */
 
@@ -118,7 +118,7 @@
     }
 
     async function deleteByFilter(filterFn, typeName) {
-        var dropdown = document.getElementById('rebelship-dropdown');
+        var dropdown = document.getElementById('piratestreaure-dropdown');
         if (dropdown) dropdown.style.display = 'none';
 
         var progressDiv = showProgress('Loading chats...');

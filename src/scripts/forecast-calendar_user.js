@@ -3,14 +3,14 @@
 // @namespace    http://tampermonkey.net/
 // @version      3.44
 // @description  Embedded forecast calendar with page-flip navigation
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        14
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
 // @enabled      false
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // @background-job-required true
 // ==/UserScript==
 /* globals addMenuItem */
@@ -686,10 +686,10 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        // Listen for RebelShip menu clicks to close our modal
-        window.addEventListener('rebelship-menu-click', function() {
+        // Listen for PiratesTreasure menu clicks to close our modal
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (isForecastModalOpen) {
-                console.log('[Forecast] RebelShip menu clicked, closing modal');
+                console.log('[Forecast] PiratesTreasure menu clicked, closing modal');
                 closeForecastModal();
             }
         });
@@ -824,9 +824,9 @@
     };
 
     async function loadAutoPostLastRun() {
-        if (!window.RebelShipBridge) return;
+        if (!window.PiratesTreasureBridge) return;
         try {
-            var stored = await window.RebelShipBridge.storage.get(FORECAST_SCRIPT_NAME, FORECAST_STORE_NAME, 'autoPostLastRun');
+            var stored = await window.PiratesTreasureBridge.storage.get(FORECAST_SCRIPT_NAME, FORECAST_STORE_NAME, 'autoPostLastRun');
             if (stored) {
                 var parsed = JSON.parse(stored);
                 autoPostLastRun.today = parsed.today;
@@ -838,18 +838,18 @@
     }
 
     async function saveAutoPostLastRun() {
-        if (!window.RebelShipBridge) return;
+        if (!window.PiratesTreasureBridge) return;
         try {
-            await window.RebelShipBridge.storage.set(FORECAST_SCRIPT_NAME, FORECAST_STORE_NAME, 'autoPostLastRun', JSON.stringify(autoPostLastRun));
+            await window.PiratesTreasureBridge.storage.set(FORECAST_SCRIPT_NAME, FORECAST_STORE_NAME, 'autoPostLastRun', JSON.stringify(autoPostLastRun));
         } catch (e) {
             console.error('[Forecast] Failed to save autoPostLastRun:', e);
         }
     }
 
     async function loadForecastCmdSettings() {
-        if (!window.RebelShipBridge) return;
+        if (!window.PiratesTreasureBridge) return;
         try {
-            var stored = await window.RebelShipBridge.storage.get(FORECAST_SCRIPT_NAME, FORECAST_STORE_NAME, 'cmdSettings');
+            var stored = await window.PiratesTreasureBridge.storage.get(FORECAST_SCRIPT_NAME, FORECAST_STORE_NAME, 'cmdSettings');
             if (stored) {
                 var parsed = JSON.parse(stored);
                 if (parsed.defaultTimezone) {
@@ -868,9 +868,9 @@
     }
 
     async function saveForecastCmdSettings() {
-        if (!window.RebelShipBridge) return;
+        if (!window.PiratesTreasureBridge) return;
         try {
-            await window.RebelShipBridge.storage.set(FORECAST_SCRIPT_NAME, FORECAST_STORE_NAME, 'cmdSettings', JSON.stringify(forecastCmdSettings));
+            await window.PiratesTreasureBridge.storage.set(FORECAST_SCRIPT_NAME, FORECAST_STORE_NAME, 'cmdSettings', JSON.stringify(forecastCmdSettings));
         } catch (e) {
             console.error('[Forecast] Failed to save cmd settings:', e);
         }
@@ -1109,7 +1109,7 @@
     }
 
     async function checkAutoPost() {
-        if (!window.RebelShipChatBot || !window.RebelShipChatBot.sendAllianceMessage) {
+        if (!window.PiratesTreasureChatBot || !window.PiratesTreasureChatBot.sendAllianceMessage) {
             return;
         }
 
@@ -1127,7 +1127,7 @@
                 var message = await generateForecastMessage(todayDay, 'Forecast Bot');
                 if (message) {
                     console.log('[Forecast] Auto-posting today\'s forecast');
-                    await window.RebelShipChatBot.sendAllianceMessage(message);
+                    await window.PiratesTreasureChatBot.sendAllianceMessage(message);
                 }
             }
         }
@@ -1144,7 +1144,7 @@
                 var tomorrowMessage = await generateForecastMessage(tomorrowDay, 'Forecast Bot');
                 if (tomorrowMessage) {
                     console.log('[Forecast] Auto-posting tomorrow\'s forecast');
-                    await window.RebelShipChatBot.sendAllianceMessage(tomorrowMessage);
+                    await window.PiratesTreasureChatBot.sendAllianceMessage(tomorrowMessage);
                 }
             }
         }
@@ -1188,19 +1188,19 @@
 
     // Background job for Android BackgroundScriptService
     function registerBackgroundJob() {
-        window.rebelshipBackgroundJobs = window.rebelshipBackgroundJobs || [];
+        window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
 
-        var alreadyRegistered = window.rebelshipBackgroundJobs.some(function(job) {
+        var alreadyRegistered = window.piratestreaureBackgroundJobs.some(function(job) {
             return job.name === 'ForecastAutoPost';
         });
         if (alreadyRegistered) {
             return;
         }
 
-        window.rebelshipBackgroundJobs.push({
+        window.piratestreaureBackgroundJobs.push({
             name: 'ForecastAutoPost',
             run: async function() {
-                if (!window.RebelShipChatBot || !window.RebelShipChatBot.sendAllianceMessage) {
+                if (!window.PiratesTreasureChatBot || !window.PiratesTreasureChatBot.sendAllianceMessage) {
                     return { skipped: true, reason: 'ChatBot not available' };
                 }
 
@@ -1221,7 +1221,7 @@
                         var todayDay = now.getDate();
                         var message = await generateForecastMessage(todayDay, 'Forecast Bot');
                         if (message) {
-                            await window.RebelShipChatBot.sendAllianceMessage(message);
+                            await window.PiratesTreasureChatBot.sendAllianceMessage(message);
                             results.todayPosted = true;
                         }
                     }
@@ -1238,7 +1238,7 @@
                         var tomorrowDay = tomorrowDate.getDate();
                         var tomorrowMessage = await generateForecastMessage(tomorrowDay, 'Forecast Bot');
                         if (tomorrowMessage) {
-                            await window.RebelShipChatBot.sendAllianceMessage(tomorrowMessage);
+                            await window.PiratesTreasureChatBot.sendAllianceMessage(tomorrowMessage);
                             results.tomorrowPosted = true;
                         }
                     }
@@ -1250,7 +1250,7 @@
     }
 
     async function registerChatBotCommands() {
-        if (!window.RebelShipChatBot || !window.RebelShipChatBot.registerCommand) {
+        if (!window.PiratesTreasureChatBot || !window.PiratesTreasureChatBot.registerCommand) {
             return;
         }
 
@@ -1258,7 +1258,7 @@
         await loadForecastCmdSettings();
         await loadAutoPostLastRun();
 
-        window.RebelShipChatBot.registerCommand('forecast', handleForecastCommand, {
+        window.PiratesTreasureChatBot.registerCommand('forecast', handleForecastCommand, {
             minRole: 'all',
             description: 'Fuel/CO2 price forecast',
             usage: '!forecast [day] [timezone]\n' +
@@ -1270,7 +1270,7 @@
             renderSettings: renderForecastSettings
         });
 
-        window.RebelShipChatBot.registerCommand('fc', handleForecastCommand, {
+        window.PiratesTreasureChatBot.registerCommand('fc', handleForecastCommand, {
             minRole: 'all',
             description: 'Shortcut for !forecast',
             usage: 'Same as !forecast - see !help forecast'
@@ -1292,14 +1292,14 @@
         // Setup modal watcher (same pattern as alliance-search)
         setupModalWatcher();
 
-        // Use global addMenuItem from RebelShipMenu
+        // Use global addMenuItem from PiratesTreasureMenu
         addMenuItem('Bunker Forecast', openForecast, 18);
 
         // Register ChatBot commands (with delay to ensure ChatBot is loaded)
         setTimeout(registerChatBotCommands, 1000);
     }
 
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {

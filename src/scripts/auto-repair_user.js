@@ -1,17 +1,17 @@
 // ==UserScript==
 // @name         ShippingManager - Auto Repair
-// @namespace    https://rebelship.org/
+// @namespace    https://github.com/PiratesTreasure
 // @version      2.47
 // @description  Auto-repair vessels when wear reaches threshold
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        7
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
 // @enabled      false
 // @background-job-required true
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // ==/UserScript==
 /* globals addMenuItem */
 
@@ -71,7 +71,7 @@
     // ========== REBELSHIPBRIDGE STORAGE ==========
     async function dbGet(key) {
         try {
-            var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             if (result) {
                 return JSON.parse(result);
             }
@@ -84,7 +84,7 @@
 
     async function dbSet(key, value) {
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
             return true;
         } catch (e) {
             console.error('[AutoRepair] dbSet error:', e);
@@ -348,9 +348,9 @@
         if (!settings.notifySystem) return;
 
         // 1. Android bridge notification
-        if (typeof window.RebelShipNotify !== 'undefined' && window.RebelShipNotify.notify) {
+        if (typeof window.PiratesTreasureNotify !== 'undefined' && window.PiratesTreasureNotify.notify) {
             try {
-                window.RebelShipNotify.notify(title + ': ' + message);
+                window.PiratesTreasureNotify.notify(title + ': ' + message);
                 log('System notification sent');
                 return;
             } catch (e) {
@@ -494,9 +494,9 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('rebelship-menu-click', function() {
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (isRepairModalOpen) {
-                log('RebelShip menu clicked, closing modal');
+                log('PiratesTreasure menu clicked, closing modal');
                 closeRepairModal();
             }
         });
@@ -872,7 +872,7 @@
     }
 
     // Expose for Android BackgroundScriptService
-    window.rebelshipRunYardForeman = function() {
+    window.piratestreaureRunYardForeman = function() {
         return loadSettings().then(function() {
             if (!settings.enabled) {
                 return { skipped: true, reason: 'disabled' };
@@ -881,7 +881,7 @@
         });
     };
 
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -890,9 +890,9 @@
     }
 
     // Register for background job system
-    window.rebelshipBackgroundJobs = window.rebelshipBackgroundJobs || [];
-    window.rebelshipBackgroundJobs.push({
+    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
+    window.piratestreaureBackgroundJobs.push({
         name: 'YardForeman',
-        run: function() { return window.rebelshipRunYardForeman(); }
+        run: function() { return window.piratestreaureRunYardForeman(); }
     });
 })();

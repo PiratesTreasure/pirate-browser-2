@@ -4,14 +4,14 @@
 // @description  Automated chatbot for alliance chat and DMs with command system
 // @version      2.22
 // @order        23
-// @author       RebelShip
+// @author       PiratesTreasure
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
-// @RequireRebelShipMenu true
+// @RequirePiratesTreasureMenu true
 // @background-job-required true
 // @enabled      false
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureStorage true
 // ==/UserScript==
 /* globals addMenuItem */
 
@@ -87,9 +87,9 @@
     // ============================================
 
     async function dbGet(key) {
-        if (!window.RebelShipBridge) return null;
+        if (!window.PiratesTreasureBridge) return null;
         try {
-            var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             if (result) return JSON.parse(result);
             return null;
         } catch (e) {
@@ -99,9 +99,9 @@
     }
 
     async function dbSet(key, value) {
-        if (!window.RebelShipBridge) return false;
+        if (!window.PiratesTreasureBridge) return false;
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
             return true;
         } catch (e) {
             log('dbSet error: ' + e, 'error');
@@ -434,7 +434,7 @@
     // Command System
     // ============================================
 
-    window.RebelShipChatBot = window.RebelShipChatBot || {
+    window.PiratesTreasureChatBot = window.PiratesTreasureChatBot || {
         registerCommand: function(name, handler, options) {
             options = options || {};
             registeredCommands[name.toLowerCase()] = {
@@ -851,7 +851,7 @@
     function setupModalWatcher() {
         if (modalListenerAttached) return;
         modalListenerAttached = true;
-        window.addEventListener('rebelship-menu-click', function() {
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (isModalOpen) closeModal();
         });
     }
@@ -1437,7 +1437,7 @@
     // ============================================
 
     async function initBridge() {
-        if (window.RebelShipBridge) {
+        if (window.PiratesTreasureBridge) {
             bridgeReady = true;
             await loadSettings();
             await loadProcessedIds();
@@ -1450,10 +1450,10 @@
 
     // Background job for Android BackgroundScriptService
     function registerBackgroundJob() {
-        window.rebelshipBackgroundJobs = window.rebelshipBackgroundJobs || [];
+        window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
 
         // Check if already registered
-        var alreadyRegistered = window.rebelshipBackgroundJobs.some(function(job) {
+        var alreadyRegistered = window.piratestreaureBackgroundJobs.some(function(job) {
             return job.name === 'ChatBot';
         });
         if (alreadyRegistered) {
@@ -1461,7 +1461,7 @@
             return;
         }
 
-        window.rebelshipBackgroundJobs.push({
+        window.piratestreaureBackgroundJobs.push({
             name: 'ChatBot',
             run: async function() {
                 if (!enabled) {
@@ -1472,7 +1472,7 @@
 
                 try {
                     // Load settings if not loaded
-                    if (!bridgeReady && window.RebelShipBridge) {
+                    if (!bridgeReady && window.PiratesTreasureBridge) {
                         bridgeReady = true;
                         await loadSettings();
                         await loadProcessedIds();
@@ -1507,7 +1507,7 @@
         log('ChatBot initialized');
     }
 
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {

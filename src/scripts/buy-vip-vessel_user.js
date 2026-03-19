@@ -2,13 +2,13 @@
 // @name        ShippingManager - VIP Vessel Shop
 // @description Quick access to purchase all VIP vessels as much as you have points for ;)
 // @version     2.29
-// @author      https://github.com/justonlyforyou/
+// @author      https://github.com/PiratesTreasure
 // @order        31
 // @match       https://shippingmanager.cc/*
 // @grant       none
 // @run-at      document-end
 // @enabled     false
-// @RequireRebelShipMenu true
+// @RequirePiratesTreasureMenu true
 // ==/UserScript==
 /* globals addSubMenu */
 

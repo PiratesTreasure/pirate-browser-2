@@ -4,14 +4,14 @@
 // @description  IPO Alerts and Investments tabs in Finance modal
 // @version      2.99
 // @order        16
-// @author       RebelShip
+// @author       PiratesTreasure
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
-// @RequireRebelShipMenu true
+// @RequirePiratesTreasureMenu true
 // @background-job-required true
 // @enabled      false
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureStorage true
 // ==/UserScript==
 /* globals addMenuItem */
 
@@ -126,9 +126,9 @@
     function sendSystemNotification(title, message) {
         if (!settings.desktopNotifications) return;
 
-        if (typeof window.RebelShipNotify !== 'undefined' && window.RebelShipNotify.notify) {
+        if (typeof window.PiratesTreasureNotify !== 'undefined' && window.PiratesTreasureNotify.notify) {
             try {
-                window.RebelShipNotify.notify(title + ': ' + message);
+                window.PiratesTreasureNotify.notify(title + ': ' + message);
                 log('System notification sent');
                 return;
             } catch (e) {
@@ -169,12 +169,12 @@
     }
 
     // ============================================
-    // STORAGE (RebelShipBridge)
+    // STORAGE (PiratesTreasureBridge)
     // ============================================
     async function dbGet(key) {
-        if (!window.RebelShipBridge) return null;
+        if (!window.PiratesTreasureBridge) return null;
         try {
-            var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             if (result) {
                 return JSON.parse(result);
             }
@@ -186,9 +186,9 @@
     }
 
     async function dbSet(key, value) {
-        if (!window.RebelShipBridge) return false;
+        if (!window.PiratesTreasureBridge) return false;
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
             return true;
         } catch (e) {
             log('dbSet error: ' + e);
@@ -685,9 +685,9 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('rebelship-menu-click', function() {
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (isModalOpen) {
-                log('RebelShip menu clicked, closing modal');
+                log('PiratesTreasure menu clicked, closing modal');
                 closeModal();
             }
         });
@@ -1560,7 +1560,7 @@
     // INIT
     // ============================================
     async function initBridge() {
-        if (window.RebelShipBridge) {
+        if (window.PiratesTreasureBridge) {
             bridgeReady = true;
             await loadSettings();
             await loadCachedData();
@@ -1599,10 +1599,10 @@
     var BACKGROUND_JOB_INTERVAL_MS = 6 * 60 * 1000; // 6 minutes
 
     function registerBackgroundJob() {
-        window.rebelshipBackgroundJobs = window.rebelshipBackgroundJobs || [];
+        window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
 
         // Check if already registered
-        var alreadyRegistered = window.rebelshipBackgroundJobs.some(function(job) {
+        var alreadyRegistered = window.piratestreaureBackgroundJobs.some(function(job) {
             return job.name === 'AutoStock';
         });
         if (alreadyRegistered) {
@@ -1610,7 +1610,7 @@
             return;
         }
 
-        window.rebelshipBackgroundJobs.push({
+        window.piratestreaureBackgroundJobs.push({
             name: 'AutoStock',
             run: async function() {
                 var now = Date.now();
@@ -1628,7 +1628,7 @@
 
                 try {
                     // Load settings and data if not loaded
-                    if (!bridgeReady && window.RebelShipBridge) {
+                    if (!bridgeReady && window.PiratesTreasureBridge) {
                         bridgeReady = true;
                         await loadSettings();
                         await loadCachedData();
@@ -1673,7 +1673,7 @@
         log('Auto Stock initialized');
     }
 
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {

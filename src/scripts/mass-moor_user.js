@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      4.34
 // @description  Mass Moor and Resume vessels with checkbox selection
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        13
 // @match        https://shippingmanager.cc/*
 // @grant        none
@@ -52,24 +52,55 @@
             return '';
         }
         var result = '';
+
+        // Port tab: has depart-all button
         if (document.getElementById('depart-all-btn')) {
             result = 'port';
         } else if (document.querySelector('.singleButtonWrapper')) {
-            var firstNameEl = listing.querySelector('.vesselRow .vesselName .nameValue');
-            if (firstNameEl) {
-                var lookupName = sanitizeName(firstNameEl.textContent);
+            // Check page header text first - most reliable indicator
+            var headerEl = listing.querySelector('h2, h3, .header, [class*="header"], .title');
+            if (headerEl) {
+                var headerText = headerEl.textContent.toLowerCase();
+                if (headerText.includes('anchor') || headerText.includes('moor') || headerText.includes('park')) {
+                    result = 'anchor';
+                } else if (headerText.includes('enroute') || headerText.includes('sea') || headerText.includes('voyage')) {
+                    result = 'enroute';
+                }
+            }
+
+            // If header text didn't work, check the vessels in the list
+            if (!result) {
                 var store = getVesselStore();
-                if (store && store.userVessels) {
-                    for (var idx = 0; idx < store.userVessels.length; idx++) {
-                        if (store.userVessels[idx].name === lookupName) {
-                            result = store.userVessels[idx].is_parked ? 'anchor' : 'enroute';
-                            break;
+                var rows = listing.querySelectorAll('.vesselRow');
+                var parkedCount = 0;
+                var notParkedCount = 0;
+
+                for (var ri = 0; ri < Math.min(rows.length, 5); ri++) {
+                    var nameEl2 = rows[ri].querySelector('.vesselName .nameValue');
+                    if (!nameEl2) continue;
+                    var lookupName = sanitizeName(nameEl2.textContent);
+                    if (store && store.userVessels) {
+                        for (var idx = 0; idx < store.userVessels.length; idx++) {
+                            if (store.userVessels[idx].name === lookupName) {
+                                if (store.userVessels[idx].is_parked) parkedCount++;
+                                else notParkedCount++;
+                                break;
+                            }
                         }
                     }
                 }
+
+                // If majority are parked, treat as anchor tab
+                if (parkedCount > notParkedCount) {
+                    result = 'anchor';
+                } else if (notParkedCount > 0) {
+                    result = 'enroute';
+                } else {
+                    result = 'enroute'; // fallback
+                }
             }
-            if (!result) result = 'enroute';
         }
+
         headerCache.text = result;
         headerCache.timestamp = now;
         return result;
@@ -209,7 +240,9 @@
         if (headerText === 'port') {
             candidates = vesselStore.userVessels.filter(function(v) { return v.status === 'port' && !v.is_parked; });
         } else if (headerText === 'anchor') {
-            candidates = vesselStore.userVessels.filter(function(v) { return v.is_parked === true; });
+            // Use all vessels for anchor tab - Pinia may be stale after mass-moor
+            // processSelectedVessels will verify is_parked before resuming
+            candidates = vesselStore.userVessels;
         } else if (headerText === 'enroute') {
             candidates = vesselStore.userVessels.filter(function(v) { return v.status !== 'port' && !v.is_parked; });
         } else {
@@ -289,9 +322,18 @@
             }
             var existingCheckbox = row.querySelector('.fleet-manager-checkbox');
 
-            if (isAnchored && (!vessel || !vessel.is_parked)) {
-                if (existingCheckbox) existingCheckbox.remove();
-                continue;
+            // On anchor tab: show checkbox even if Pinia hasn't updated yet
+            // We trust the tab context over potentially stale Pinia state
+            if (isAnchored && !vessel) {
+                // Vessel not found in store - still show checkbox, ID lookup will handle it
+                if (existingCheckbox) continue;
+            } else if (isAnchored && vessel && vessel.is_parked === false) {
+                // Pinia explicitly says not parked - skip (but this may be stale)
+                // Only skip if we have high confidence (vessel status is 'port' which means actively at port not moored)
+                if (vessel.status === 'port') {
+                    if (existingCheckbox) existingCheckbox.remove();
+                    continue;
+                }
             }
 
             if (existingCheckbox) continue;
@@ -486,8 +528,10 @@
 
         var vesselIds = allVesselIds.filter(function(vid) {
             var vessel = getVesselById(vid);
-            if (!vessel) { return false; }
-            if (action === 'resume' && vessel.is_parked !== true) { return false; }
+            if (!vessel) { return true; } // vessel not in store - try anyway
+            // For resume: skip only if vessel is actively at port (not moored)
+            // Don't trust is_parked alone as Pinia may be stale after mass-moor
+            if (action === 'resume' && vessel.status === 'port' && vessel.is_parked !== true) { return false; }
             if (action === 'moor' && vessel.is_parked === true) { return false; }
             return true;
         });

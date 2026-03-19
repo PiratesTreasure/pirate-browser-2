@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      3.85
 // @description  Detect vessel history API calls and offer CSV download
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        996
 // @match        https://shippingmanager.cc/*
 // @grant        none

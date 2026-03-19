@@ -2,14 +2,14 @@
 // @name        ShippingManager - Alliance Chat Notification
 // @description Shows a red dot on Alliance button when there are unread messages
 // @version     2.27
-// @author      https://github.com/justonlyforyou/
+// @author      https://github.com/PiratesTreasure
 // @order        17
 // @match       https://shippingmanager.cc/*
 // @run-at      document-end
 // @grant       none
 // @enabled     false
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // @background-job-required true
 // ==/UserScript==
 /* globals addMenuItem */
@@ -61,12 +61,12 @@
     }
 
     // ============================================
-    // RebelShipBridge Storage Functions
+    // PiratesTreasureBridge Storage Functions
     // ============================================
 
     async function dbGet(key) {
         try {
-            var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             if (result) {
                 return JSON.parse(result);
             }
@@ -79,7 +79,7 @@
 
     async function dbSet(key, value) {
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
             return true;
         } catch (e) {
             console.error('[AllianceChatNotify] dbSet error:', e);
@@ -126,12 +126,12 @@
     function sendSystemNotification(title, message) {
         if (!settings.desktopNotifications) return;
 
-        if (typeof window.RebelShipNotify !== 'undefined' && window.RebelShipNotify.notify) {
+        if (typeof window.PiratesTreasureNotify !== 'undefined' && window.PiratesTreasureNotify.notify) {
             try {
-                window.RebelShipNotify.notify(title + ': ' + message);
+                window.PiratesTreasureNotify.notify(title + ': ' + message);
                 return;
             } catch (e) {
-                log('RebelShipNotify failed: ' + e.message);
+                log('PiratesTreasureNotify failed: ' + e.message);
             }
         }
 
@@ -550,7 +550,7 @@
                 var wasUnread = hasUnread;
                 if (checkNewest > lastReadTimestamp) {
                     hasUnread = true;
-                    if (!wasUnread && !window.__rebelshipHeadless) {
+                    if (!wasUnread && !window.__piratestreaureHeadless) {
                         log('Unread messages detected! Newest: ' + checkNewest + ' Last read: ' + lastReadTimestamp);
                         // Send notifications only on state change (first detection) and only in foreground
                         var notifyMsg = unreadCount + ' new alliance chat message' + (unreadCount > 1 ? 's' : '') + ' (latest from ' + newestSender + ')';
@@ -717,7 +717,7 @@
     });
 
     // ========== BACKGROUND JOB ==========
-    window.rebelshipRunAllianceChatNotify = function() {
+    window.piratestreaureRunAllianceChatNotify = function() {
         return loadSettings().then(function() {
             return loadLastRead();
         }).then(function() {
@@ -729,15 +729,15 @@
         });
     };
 
-    window.rebelshipBackgroundJobs = window.rebelshipBackgroundJobs || [];
-    window.rebelshipBackgroundJobs.push({
+    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
+    window.piratestreaureBackgroundJobs.push({
         name: 'AllianceChatNotify',
         interval: 60 * 1000,
-        run: function() { return window.rebelshipRunAllianceChatNotify(); }
+        run: function() { return window.piratestreaureRunAllianceChatNotify(); }
     });
 
     // Wait for page to load
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function() { setTimeout(init, 500); });
         } else {

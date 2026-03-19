@@ -1,17 +1,17 @@
 // ==UserScript==
 // @name         ShippingManager - Depart Manager
-// @namespace    https://rebelship.org/
+// @namespace    https://github.com/PiratesTreasure
 // @description  Unified departure management: Auto bunker rebuy, auto-depart, route settings
 // @version      3.109
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        11
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
 // @enabled      false
 // @background-job-required true
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // ==/UserScript==
 /* globals addMenuItem */
 
@@ -28,7 +28,7 @@
     var API_BASE = 'https://shippingmanager.cc/api';
 
     // Legacy key for Android settings sync
-    var OLD_STORAGE_KEY = 'rebelship_depart_manager';
+    var OLD_STORAGE_KEY = 'piratestreaure_depart_manager';
 
     // In-memory cache (loaded from Bridge storage)
     var storageCache = null;
@@ -130,7 +130,7 @@
     // REBELSHIPBRIDGE STORAGE HELPERS
     // ============================================
     async function dbGet(key) {
-        var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME_BRIDGE, STORE_NAME, key);
+        var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME_BRIDGE, STORE_NAME, key);
         if (result) {
             var parsed = JSON.parse(result);
             // Check for error responses from the Bridge
@@ -144,7 +144,7 @@
 
     async function dbSet(key, value) {
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME_BRIDGE, STORE_NAME, key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME_BRIDGE, STORE_NAME, key, JSON.stringify(value));
             return true;
         } catch (e) {
             log('dbSet error: ' + e.message, 'error');
@@ -153,7 +153,7 @@
     }
 
     // ============================================
-    // DEPART LOG STORAGE (RebelShipBridge)
+    // DEPART LOG STORAGE (PiratesTreasureBridge)
     // ============================================
     var DEPART_LOG_MAX_AGE_DAYS = 7;
     var pendingDepartLogs = [];
@@ -422,13 +422,13 @@
     }
 
     function syncSettingsToAndroid(settings) {
-        if (typeof window.RebelShipBridge !== 'undefined') {
+        if (typeof window.PiratesTreasureBridge !== 'undefined') {
             try {
-                if (window.RebelShipBridge.syncSettings) {
-                    window.RebelShipBridge.syncSettings(OLD_STORAGE_KEY, JSON.stringify(settings));
+                if (window.PiratesTreasureBridge.syncSettings) {
+                    window.PiratesTreasureBridge.syncSettings(OLD_STORAGE_KEY, JSON.stringify(settings));
                 }
-                if (window.RebelShipBridge.syncRebuySettings) {
-                    window.RebelShipBridge.syncRebuySettings(settings);
+                if (window.PiratesTreasureBridge.syncRebuySettings) {
+                    window.PiratesTreasureBridge.syncRebuySettings(settings);
                 }
             } catch (e) {
                 log('Android sync failed: ' + e.message);
@@ -663,7 +663,7 @@
     /**
      * Unified notification function
      * - Shows in-game toast (always)
-     * - Sends desktop notification via RebelShipNotify (if enabled in settings)
+     * - Sends desktop notification via PiratesTreasureNotify (if enabled in settings)
      * - Format: "[Depart Manager] MESSAGE"
      *
      * @param {string} message - The notification message
@@ -714,12 +714,12 @@
             }
         }
 
-        // Desktop notification via RebelShipNotify (Windows/Android browser)
-        if (showSystem && window.RebelShipNotify && window.RebelShipNotify.notify) {
+        // Desktop notification via PiratesTreasureNotify (Windows/Android browser)
+        if (showSystem && window.PiratesTreasureNotify && window.PiratesTreasureNotify.notify) {
             try {
-                window.RebelShipNotify.notify(formattedMessage);
+                window.PiratesTreasureNotify.notify(formattedMessage);
             } catch (e) {
-                log('RebelShipNotify error: ' + e.message, 'error');
+                log('PiratesTreasureNotify error: ' + e.message, 'error');
             }
         }
     }
@@ -881,6 +881,8 @@
                     co2Price = currentCo2 ? currentCo2.co2_price : null;
                 }
 
+                // Expose for analytics script
+                try { window._paBunkerPrices = { fuel: fuelPrice, co2: co2Price }; } catch {}
                 return { fuelPrice: fuelPrice, co2Price: co2Price };
             } catch (e) {
                 lastError = e;
@@ -1106,6 +1108,23 @@
 
             if (data.user) updatePiniaStore(data.user);
 
+            // Log to Pirate Analytics
+            try {
+                var paTxKey = 'pirate:PirateAnalytics:data:transactions';
+                var paTxs = JSON.parse(localStorage.getItem(paTxKey) || '[]');
+                paTxs.unshift({
+                    timestamp: Date.now(),
+                    date: new Date().toISOString().split('T')[0],
+                    type: 'bunker_fuel',
+                    label: 'Fuel Purchase',
+                    amountTons: amountTons,
+                    cost: Math.round(amountTons * pricePerTon),
+                    direction: 'out'
+                });
+                if (paTxs.length > 5000) paTxs.length = 5000;
+                localStorage.setItem(paTxKey, JSON.stringify(paTxs));
+            } catch {}
+
             notify('Purchased ' + formatNumber(amountTons) + 't fuel @ $' + formatNumber(pricePerTon), 'success', 'fuel');
             return { success: true, data: data };
         } catch (e) {
@@ -1141,6 +1160,23 @@
             var data = await response.json();
 
             if (data.user) updatePiniaStore(data.user);
+
+            // Log to Pirate Analytics
+            try {
+                var paTxKey2 = 'pirate:PirateAnalytics:data:transactions';
+                var paTxs2 = JSON.parse(localStorage.getItem(paTxKey2) || '[]');
+                paTxs2.unshift({
+                    timestamp: Date.now(),
+                    date: new Date().toISOString().split('T')[0],
+                    type: 'bunker_co2',
+                    label: 'CO2 Purchase',
+                    amountTons: amountTons,
+                    cost: Math.round(amountTons * pricePerTon),
+                    direction: 'out'
+                });
+                if (paTxs2.length > 5000) paTxs2.length = 5000;
+                localStorage.setItem(paTxKey2, JSON.stringify(paTxs2));
+            } catch {}
 
             notify('Purchased ' + formatNumber(amountTons) + 't CO2 @ $' + formatNumber(pricePerTon), 'success', 'co2');
             return { success: true, data: data };
@@ -1786,7 +1822,7 @@
         var btnContent = btn.querySelector('.btn-content-wrapper');
         if (!btnContent) return;
 
-        var expectedText = autoDepartRunning ? 'Departing...' : 'Rebel Depart all';
+        var expectedText = autoDepartRunning ? 'Departing...' : 'Pirate Depart all';
         if (btnContent.textContent !== expectedText) {
             // Disconnect before our change to avoid self-triggering loop
             if (departBtnObserver) departBtnObserver.disconnect();
@@ -1822,13 +1858,13 @@
                 return;
             }
 
-            log('Rebel Depart all ' + e.type + ' - starting single-ship departures');
+            log('Pirate Depart all ' + e.type + ' - starting single-ship departures');
 
             try {
                 var result = await autoDepartVessels(true);
-                log('Rebel Depart all complete: ' + (result.departed || 0) + ' vessels departed');
+                log('Pirate Depart all complete: ' + (result.departed || 0) + ' vessels departed');
             } catch (err) {
-                log('Rebel Depart all error: ' + err.message, 'error');
+                log('Pirate Depart all error: ' + err.message, 'error');
             }
         };
 
@@ -2158,50 +2194,62 @@
         // Execute original fetch
         var response = await originalFetch.apply(this, args);
 
-        // Track single depart contribution AFTER the request
-        if (singleDepartContext && response.ok) {
+        // Track ALL single departures via fetch (log always, contrib only if enabled)
+        if (urlStr.includes('/route/depart') && !urlStr.includes('/route/depart-all') &&
+            !urlStr.includes('/route/depart-coop') && response.ok && options && options.body) {
             try {
-                var departClone = response.clone();
-                var departData = await departClone.json();
-                if (departData.data && departData.data.depart_info) {
-                    var contribAfterSingle = await getMyContribution();
-                    // Use cached vessel lookup map instead of scanning array
-                    var departedVessel = getVesselFromStore(singleDepartContext.vesselId);
-                    var departInfo = departData.data.depart_info;
+                var departBody2 = JSON.parse(options.body);
+                var departVesselId2 = departBody2.user_vessel_id;
+                // Skip if already tracked by departWithTracking (auto-depart)
+                if (departVesselId2 && !activeTrackingVesselIds.has(departVesselId2)) {
+                    var departClone = response.clone();
+                    var departData = await departClone.json();
+                    if (departData.data && departData.data.depart_info) {
+                        var departInfo = departData.data.depart_info;
+                        var departedVessel = getVesselFromStore(departVesselId2);
 
-                    var cBefore = singleDepartContext.contribBefore;
-                    var cAfter = contribAfterSingle;
+                        // Contribution tracking (only if enabled)
+                        var cBefore2 = singleDepartContext ? singleDepartContext.contribBefore : null;
+                        var cAfter2 = null;
+                        if (getSettings().contributionTrackingEnabled) {
+                            try { cAfter2 = await getMyContribution(); } catch {}
+                        }
 
-                    saveDepartLog({
-                        timestamp: Date.now(),
-                        date: new Date().toISOString().split('T')[0],
-                        vesselId: singleDepartContext.vesselId,
-                        vesselName: departedVessel ? departedVessel.name : 'Unknown',
-                        vesselType: departedVessel ? departedVessel.capacity_type : null,
-                        routeOrigin: departedVessel ? departedVessel.route_origin : null,
-                        routeDestination: departedVessel ? departedVessel.route_destination : null,
-                        routeName: departedVessel ? departedVessel.route_name : null,
-                        routeDistance: departedVessel ? departedVessel.route_distance : null,
-                        routeSpeed: departedVessel ? departedVessel.route_speed : null,
-                        prices: departedVessel ? departedVessel.prices : null,
-                        myContributionBefore: cBefore ? cBefore.myContribution : null,
-                        myContributionAfter: cAfter ? cAfter.myContribution : null,
-                        myContributionDelta: (cBefore && cAfter) ? (cAfter.myContribution - cBefore.myContribution) : null,
-                        departResponse: {
-                            success: true,
-                            income: departInfo.depart_income,
-                            harborFee: departInfo.harbor_fee,
-                            channelFee: departInfo.channel_payment,
-                            fuelUsed: departInfo.fuel_usage / 1000,
-                            co2Used: departInfo.co2_emission / 1000,
-                            teuDry: departInfo.teu_dry,
-                            teuRef: departInfo.teu_refrigerated,
-                            crudeOil: departInfo.crude_oil,
-                            fuelCargo: departInfo.fuel,
-                            guardFee: departInfo.guard_payment
-                        },
-                        triggerType: 'single'
-                    });
+                        saveDepartLog({
+                            timestamp: Date.now(),
+                            date: new Date().toISOString().split('T')[0],
+                            vesselId: departVesselId2,
+                            vesselName: departedVessel ? departedVessel.name : 'Unknown',
+                            vesselType: departedVessel ? departedVessel.capacity_type : null,
+                            routeOrigin: departedVessel ? departedVessel.route_origin : null,
+                            routeDestination: departedVessel ? departedVessel.route_destination : null,
+                            routeName: departedVessel ? departedVessel.route_name : null,
+                            routeDistance: departedVessel ? departedVessel.route_distance : null,
+                            routeSpeed: departedVessel ? departedVessel.route_speed : null,
+                            prices: departedVessel ? departedVessel.prices : null,
+                            capacityMax: departedVessel ? departedVessel.capacity_max : null,
+                            myContributionBefore: cBefore2 ? cBefore2.myContribution : null,
+                            myContributionAfter: cAfter2 ? cAfter2.myContribution : null,
+                            myContributionDelta: (cBefore2 && cAfter2) ? (cAfter2.myContribution - cBefore2.myContribution) : null,
+                            departResponse: {
+                                success: true,
+                                income: departInfo.depart_income,
+                                harborFee: departInfo.harbor_fee,
+                                channelFee: departInfo.channel_payment,
+                                fuelUsed: departInfo.fuel_usage / 1000,
+                                co2Used: departInfo.co2_emission / 1000,
+                                teuDry: departInfo.teu_dry,
+                                teuRef: departInfo.teu_refrigerated,
+                                crudeOil: departInfo.crude_oil,
+                                fuelCargo: departInfo.fuel,
+                                guardFee: departInfo.guard_payment
+                            },
+                            triggerType: 'single'
+                        });
+                        log('Depart logged: ' + (departedVessel ? departedVessel.name : 'Vessel ' + departVesselId2));
+                        // Flush immediately so data is persisted even without auto-depart running
+                        flushDepartLogs().catch(function() {});
+                    }
                 }
             } catch (e) {
                 log('Single depart tracking error: ' + e.message, 'error');
@@ -2311,7 +2359,7 @@
 
             // Simulate a proper XHR response so the game's callbacks fire with valid data
             var fakeResponseData = JSON.stringify({
-                data: { departed_count: 0, message: 'Handled by Rebel single-ship mode' }
+                data: { departed_count: 0, message: 'Handled by Pirate single-ship mode' }
             });
             Object.defineProperty(xhr, 'readyState', { writable: true, value: 4 });
             Object.defineProperty(xhr, 'status', { writable: true, value: 200 });
@@ -3366,6 +3414,13 @@
         if (isChanged) {
             if (!rsPendingChanges.has(vesselId)) rsPendingChanges.set(vesselId, {});
             var numVal = parseFloat(value);
+            // If this is a % price input, convert back to absolute price
+            if (el.dataset.mode === 'pct' && changeKey.indexOf('price_') === 0) {
+                var autoVal = parseFloat(el.dataset.auto);
+                if (!isNaN(autoVal) && autoVal > 0 && !isNaN(numVal)) {
+                    numVal = parseFloat((autoVal * (1 + numVal / 100)).toFixed(2));
+                }
+            }
             rsPendingChanges.get(vesselId)[changeKey] = isNaN(numVal) ? null : numVal;
             el.classList.add('changed');
         } else {
@@ -3499,16 +3554,22 @@
             speedHtml += '<span class="pending-indicator">->' + pending.speed + '</span>';
         }
 
-        var price1Html = '<input type="number" step="0.01" data-vessel-id="' + v.id + '" data-change-key="' + key1 + '" data-auto="' + (auto1 !== null ? auto1 : '') + '" data-original="' + (price1 !== null ? price1 : '') + '" value="' + (price1 !== null ? price1 : '') + '" placeholder="-">';
+        // Show price as % above/below auto price - editable
+        var pct1Val = (auto1 !== null && price1 !== null) ? ((price1 - auto1) / auto1 * 100).toFixed(1) : '';
+        var pct2Val = (auto2 !== null && price2 !== null) ? ((price2 - auto2) / auto2 * 100).toFixed(1) : '';
+
+        var price1Html = '<input type="number" step="0.1" data-vessel-id="' + v.id + '" data-change-key="' + key1 + '" data-auto="' + (auto1 !== null ? auto1 : '') + '" data-original="' + pct1Val + '" data-mode="pct" value="' + pct1Val + '" placeholder="%" style="width:36px;" title="% above/below auto price">%';
         var pendingPrice1 = hasPending && pending.prices ? (isCargo ? pending.prices.dry : pending.prices.fuel) : null;
-        if (pendingPrice1 !== null && pendingPrice1 !== undefined && pendingPrice1 !== price1) {
-            price1Html += '<span class="pending-indicator">->' + pendingPrice1 + '</span>';
+        if (pendingPrice1 !== null && pendingPrice1 !== undefined && pendingPrice1 !== price1 && auto1 !== null) {
+            var pendingPct1Val = ((pendingPrice1 - auto1) / auto1 * 100).toFixed(1);
+            price1Html += '<span class="pending-indicator">->' + pendingPct1Val + '%</span>';
         }
 
-        var price2Html = '<input type="number" step="0.01" data-vessel-id="' + v.id + '" data-change-key="' + key2 + '" data-auto="' + (auto2 !== null ? auto2 : '') + '" data-original="' + (price2 !== null ? price2 : '') + '" value="' + (price2 !== null ? price2 : '') + '" placeholder="-">';
+        var price2Html = '<input type="number" step="0.1" data-vessel-id="' + v.id + '" data-change-key="' + key2 + '" data-auto="' + (auto2 !== null ? auto2 : '') + '" data-original="' + pct2Val + '" data-mode="pct" value="' + pct2Val + '" placeholder="%" style="width:36px;" title="% above/below auto price">%';
         var pendingPrice2 = hasPending && pending.prices ? (isCargo ? pending.prices.refrigerated : pending.prices.crude_oil) : null;
-        if (pendingPrice2 !== null && pendingPrice2 !== undefined && pendingPrice2 !== price2) {
-            price2Html += '<span class="pending-indicator">->' + pendingPrice2 + '</span>';
+        if (pendingPrice2 !== null && pendingPrice2 !== undefined && pendingPrice2 !== price2 && auto2 !== null) {
+            var pendingPct2Val = ((pendingPrice2 - auto2) / auto2 * 100).toFixed(1);
+            price2Html += '<span class="pending-indicator">->' + pendingPct2Val + '%</span>';
         }
 
         var guardsHtml = '<select data-vessel-id="' + v.id + '" data-change-key="guards" data-original="' + currentGuards + '">' +
@@ -3542,10 +3603,8 @@
             '<td class="num">' + speedHtml + '</td>' +
             '<td class="num max-speed">' + v.max_speed + '</td>' +
             '<td class="num auto-price">' + autoDisplay + '</td>' +
-            '<td class="num">' + price1Html + '</td>' +
-            '<td class="num pct-diff ' + pct1Class + '" data-pct-for="' + v.id + '-' + key1 + '">' + pct1Html + '</td>' +
-            '<td class="num">' + price2Html + '</td>' +
-            '<td class="num pct-diff ' + pct2Class + '" data-pct-for="' + v.id + '-' + key2 + '">' + pct2Html + '</td>' +
+            '<td class="num pct-diff ' + pct1Class + '" data-pct-for="' + v.id + '-' + key1 + '">' + price1Html + '</td>' +
+            '<td class="num pct-diff ' + pct2Class + '" data-pct-for="' + v.id + '-' + key2 + '">' + price2Html + '</td>' +
             '<td class="num">' + guardsHtml + '</td>' +
             '<td class="num ' + (risk > 0 ? 'warning' : '') + '">' + risk + '%</td>' +
             (showAge ? '<td class="num price-age">' + priceAge + '</td>' : '') +
@@ -3583,10 +3642,8 @@
             '<th data-tip="Current Speed (knots)">kn</th>' +
             '<th data-tip="Maximum Speed">Max</th>' +
             '<th data-tip="Auto-calculated Price">Auto</th>' +
-            '<th data-tip="' + (isCargo ? 'Dry Cargo Price\nper TEU' : 'Fuel Price\nper Ton') + '">' + label1 + '</th>' +
-            '<th data-tip="Difference from\nAuto Price">%</th>' +
-            '<th data-tip="' + (isCargo ? 'Refrigerated Price\nper TEU' : 'Crude Oil Price\nper Ton') + '">' + label2 + '</th>' +
-            '<th data-tip="Difference from\nAuto Price">%</th>' +
+            '<th data-tip="' + (isCargo ? 'Dry Cargo Price\n% above/below auto' : 'Fuel Price\n% above/below auto') + '">' + label1 + '%</th>' +
+            '<th data-tip="' + (isCargo ? 'Refrigerated Price\n% above/below auto' : 'Crude Oil Price\n% above/below auto') + '">' + label2 + '%</th>' +
             '<th data-tip="Guards\n0 or 10">G</th>' +
             '<th data-tip="Hijacking Risk\nPercentage">R%</th>';
 
@@ -3635,11 +3692,17 @@
         container.innerHTML = '<div class="rs-header">' +
             '<button class="rs-subtab ' + (rsActiveSubtab === 'cargo' ? 'active' : '') + '" data-subtab="cargo">Cargo</button>' +
             '<button class="rs-subtab ' + (rsActiveSubtab === 'tanker' ? 'active' : '') + '" data-subtab="tanker">Tanker</button>' +
+            '<span style="margin-left:8px;font-size:9px;color:#666;">Mass set %:</span>' +
+            '<select id="rs-mass-pct" style="padding:2px 4px;border:1px solid #ccc;border-radius:3px;font-size:10px;color:#01125d;background:#fff;cursor:pointer;">' +
+            [1,2,3,4,5,6,7,8,9,10].map(function(n) { return '<option value="'+n+'">+'+n+'%</option>'; }).join('') +
+            [1,2,3,4,5,6,7,8,9,10].map(function(n) { return '<option value="-'+n+'">-'+n+'%</option>'; }).join('') +
+            '</select>' +
+            '<button id="rs-mass-apply" style="padding:2px 8px;background:#0db8f4;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:10px;font-weight:600;">Apply All</button>' +
             '<span class="rs-status"></span>' +
             '<button class="rs-save-btn">Save</button>' +
         '</div>' +
         '<div class="rs-table-wrapper"><div class="rs-loading">Loading...</div></div>' +
-        '<div class="rs-footer"><a href="https://discord.gg/2wvtPz6k89" target="_blank">Join the RebelShip Discord Community</a></div>';
+        '<div class="rs-footer"><a href="https://discord.gg/2wvtPz6k89" target="_blank">Join the PiratesTreasure Discord Community</a></div>';
 
         container.querySelectorAll('.rs-subtab').forEach(function(btn) {
             btn.addEventListener('click', function() {
@@ -3650,6 +3713,32 @@
         });
 
         container.querySelector('.rs-save-btn').addEventListener('click', rsSaveRouteSettings);
+
+        container.querySelector('#rs-mass-apply').addEventListener('click', function() {
+            var pct = parseFloat(document.getElementById('rs-mass-pct').value);
+            if (isNaN(pct)) return;
+            // Set all visible price inputs to this %
+            var inputs = container.querySelectorAll('input[data-mode="pct"]');
+            inputs.forEach(function(inp) {
+                inp.value = pct;
+                inp.classList.add('changed');
+                var vesselId = inp.dataset.vesselId;
+                var changeKey = inp.dataset.changeKey;
+                var autoVal = parseFloat(inp.dataset.auto);
+                if (!isNaN(autoVal) && autoVal > 0) {
+                    var absolutePrice = parseFloat((autoVal * (1 + pct / 100)).toFixed(2));
+                    if (!rsPendingChanges.has(vesselId)) rsPendingChanges.set(vesselId, {});
+                    rsPendingChanges.get(vesselId)[changeKey] = absolutePrice;
+                    // Update pct display cell
+                    var pctCell = document.querySelector('[data-pct-for="' + vesselId + '-' + changeKey + '"]');
+                    if (pctCell) {
+                        var existing = pctCell.querySelector('.pending-indicator');
+                        if (existing) existing.remove();
+                    }
+                }
+            });
+            rsUpdateSaveButton();
+        });
 
         fetchVesselData().then(function(vessels) {
             rsCachedVessels = vessels;
@@ -3913,9 +4002,9 @@
         if (dmModalListenerAttached) return;
         dmModalListenerAttached = true;
 
-        window.addEventListener('rebelship-menu-click', function() {
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (isDMSettingsModalOpen) {
-                log('RebelShip menu clicked, closing DM modal');
+                log('PiratesTreasure menu clicked, closing DM modal');
                 closeDMSettingsModal();
             }
         });
@@ -4196,37 +4285,16 @@
             html += '</div>';
             html += '</div>';
 
-            // Departure Tracking Settings
-            html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #ddd;">';
-            html += '<div style="margin-bottom:12px;">';
-            html += '<label style="display:flex;align-items:center;cursor:pointer;">';
+            // === CONTRIBUTION TRACKING ===
+            html += '<div style="background:#fff;border-radius:8px;padding:10px;margin-bottom:12px;border:1px solid #ddd;">';
+            html += '<label style="display:flex;align-items:center;cursor:pointer;font-weight:700;font-size:14px;color:#01125d;">';
             html += '<input type="checkbox" id="dm-contrib-tracking-enabled"' + (settings.contributionTrackingEnabled ? ' checked' : '') + ' style="width:18px;height:18px;margin-right:10px;accent-color:#0db8f4;">';
-            html += '<span style="font-weight:600;">Departure Tracking</span></label>';
-            html += '<div style="font-size:12px;color:#666;margin-top:6px;line-height:1.5;">';
-            html += '<div style="margin-bottom:6px;"><strong>Tracks:</strong> Income, fuel/CO2 usage, harbor fees, alliance contribution (before/after)</div>';
-            html += '<div style="margin-bottom:6px;"><strong>Replaces:</strong> Depart All button → "Rebel Depart all" (single-ship departures with utilization check)</div>';
-            html += '<div style="background:#fff3cd;padding:6px 8px;border-radius:4px;color:#856404;"><strong>Note:</strong> 2 extra API calls per ship for contribution tracking = slower departures.</div>';
-            html += '</div>';
-            html += '</div>';
+            html += 'Contribution Tracking</label>';
+            html += '<div style="font-size:12px;color:#666;margin-top:4px;">Track contribution points gained per departure (requires alliance membership). Used by Pirate Analytics.</div>';
+            html += '<div style="font-size:11px;color:#d97706;margin-top:4px;">Note: Makes 2 extra API calls per departure — slightly slower.</div>';
             html += '</div>';
 
-            // === SPEED BREAK-EVEN ===
-            html += '<div style="background:#fff;border-radius:8px;padding:10px;margin-bottom:12px;border:1px solid #ddd;">';
-            html += '<div style="font-weight:700;font-size:16px;margin-bottom:12px;color:#0db8f4;">Speed Break-Even</div>';
-            html += '<div style="margin-bottom:12px;">';
-            html += '<label style="display:flex;align-items:center;cursor:pointer;">';
-            html += '<input type="checkbox" id="dm-breakeven-enabled"' + (settings.breakevenEnabled ? ' checked' : '') + ' style="width:18px;height:18px;margin-right:10px;accent-color:#0db8f4;">';
-            html += '<span style="font-weight:600;">Enable Slider Coloring</span></label>';
-            html += '<div style="font-size:12px;color:#666;margin-top:4px;">Colors speed sliders green (profitable) / red (unprofitable) based on fuel cost break-even.</div>';
-            html += '</div>';
-            html += '<div id="dm-breakeven-settings" style="padding:12px;background:#f9fafb;border-radius:6px;">';
-            html += '<div style="margin-bottom:10px;">';
-            html += '<label style="display:block;font-weight:600;margin-bottom:4px;font-size:13px;">Fallback Fuel Price ($/t)</label>';
-            html += '<input type="text" id="dm-breakeven-fallback" inputmode="numeric" value="' + formatNumberWithSeparator(settings.breakevenFallbackFuelPrice) + '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">';
-            html += '<div style="font-size:11px;color:#888;margin-top:4px;">Used when Fuel Auto-Rebuy is off. When on, the rebuy price threshold is used instead.</div>';
-            html += '</div>';
-            html += '</div>';
-            html += '</div>';
+            // Speed Break-Even removed
 
             // === STATUS ===
             html += '<div style="background:#f3f4f6;border-radius:8px;padding:12px;margin-bottom:20px;">';
@@ -4308,16 +4376,6 @@
             setupThousandSeparator(document.getElementById('dm-co2-mincash'));
             setupThousandSeparator(document.getElementById('dm-co2-intel-max'));
             setupThousandSeparator(document.getElementById('dm-co2-intel-below'));
-            setupThousandSeparator(document.getElementById('dm-breakeven-fallback'));
-
-            // Breakeven visibility toggle
-            function updateBreakevenVisibility() {
-                document.getElementById('dm-breakeven-settings').style.display =
-                    document.getElementById('dm-breakeven-enabled').checked ? 'block' : 'none';
-            }
-            updateBreakevenVisibility();
-            document.getElementById('dm-breakeven-enabled').addEventListener('change', updateBreakevenVisibility);
-
             document.getElementById('dm-save').addEventListener('click', async function() {
                 var fuelBasic = document.getElementById('dm-fuel-basic').checked;
                 var fuelIntel = document.getElementById('dm-fuel-intel').checked;
@@ -4353,9 +4411,9 @@
                     minUtilizationThreshold: parseInt(document.getElementById('dm-min-util-threshold').value, 10) || 50,
                     minUtilizationNotifyIngame: document.getElementById('dm-min-util-notify-ingame').checked,
                     minUtilizationNotifySystem: document.getElementById('dm-min-util-notify-system').checked,
-                    contributionTrackingEnabled: document.getElementById('dm-contrib-tracking-enabled').checked,
-                    breakevenEnabled: document.getElementById('dm-breakeven-enabled').checked,
-                    breakevenFallbackFuelPrice: getNumericValue(document.getElementById('dm-breakeven-fallback')) || 500,
+                    contributionTrackingEnabled: document.getElementById('dm-contrib-tracking-enabled') ? document.getElementById('dm-contrib-tracking-enabled').checked : false,
+                    breakevenEnabled: false,
+                    breakevenFallbackFuelPrice: 500,
                     systemNotifications: false
                 };
 
@@ -4613,7 +4671,7 @@
     // ============================================
     // EXPOSE FOR ANDROID BACKGROUND SERVICE
     // ============================================
-    window.rebelshipRunDepartManager = async function() {
+    window.piratestreaureRunDepartManager = async function() {
         // Ensure storage is loaded (needed when called from background without init)
         if (!storageCache) {
             await loadStorage();
@@ -4703,13 +4761,13 @@
             addMenuItem(SCRIPT_NAME, openSettingsModal, 20);
             initUI();
 
-            // Load data from RebelShipBridge storage
+            // Load data from PiratesTreasureBridge storage
             // If this fails, script MUST NOT continue - would overwrite settings with defaults
             await loadStorage();
 
             // Expose shared storage API for cross-script access (smugglers-eye, auto-drydock)
             // Eliminates race conditions: all reads from RAM, writes through debounced save
-            window._rebelshipDMStorage = {
+            window._piratestreaureDMStorage = {
                 isReady: function() { return storageCache !== null && dbConnectionVerified; },
                 get: function() { return storageCache; },
                 save: function(storage) { saveStorage(storage); },
@@ -4797,7 +4855,7 @@
         }
     }
 
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -4821,9 +4879,9 @@
     });
 
     // Register for background job system
-    window.rebelshipBackgroundJobs = window.rebelshipBackgroundJobs || [];
-    window.rebelshipBackgroundJobs.push({
+    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
+    window.piratestreaureBackgroundJobs.push({
         name: 'DepartManager',
-        run: async function() { return await window.rebelshipRunDepartManager(); }
+        run: async function() { return await window.piratestreaureRunDepartManager(); }
     });
 })();

@@ -4,7 +4,7 @@
 // @description  Filter ports by distance when creating new routes!
 // @version      9.34
 // @order        20
-// @author       RebelShip
+// @author       PiratesTreasure
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end

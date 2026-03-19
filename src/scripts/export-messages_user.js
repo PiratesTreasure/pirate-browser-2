@@ -2,13 +2,13 @@
 // @name        ShippingManager - Export your messages
 // @description Export all DM's as CSV or JSON
 // @version     1.27
-// @author      https://github.com/justonlyforyou/
+// @author      https://github.com/PiratesTreasure
 // @order        995
 // @match       https://shippingmanager.cc/*
 // @grant       none
 // @run-at      document-end
 // @enabled     false
-// @RequireRebelShipMenu true
+// @RequirePiratesTreasureMenu true
 // ==/UserScript==
 /* globals File, Blob, URL, addSubMenu */
 
@@ -151,7 +151,7 @@
 
     // Export all messages
     function exportMessages(format) {
-        var dropdown = document.getElementById('rebelship-dropdown');
+        var dropdown = document.getElementById('piratestreaure-dropdown');
         if (dropdown) dropdown.style.display = 'none';
 
         var existing = document.getElementById('export-progress');
@@ -247,7 +247,7 @@
 
     // Export alliance chat
     function exportAllianceChat(format) {
-        var dropdown = document.getElementById('rebelship-dropdown');
+        var dropdown = document.getElementById('piratestreaure-dropdown');
         if (dropdown) dropdown.style.display = 'none';
 
         var existing = document.getElementById('export-progress');

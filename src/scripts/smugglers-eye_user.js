@@ -1,17 +1,17 @@
 // ==UserScript==
 // @name         ShippingManager - Smuggler's Eye
-// @namespace    https://rebelship.org/
+// @namespace    https://github.com/PiratesTreasure
 // @version      1.97
 // @description  Auto-adjust cargo prices: 4% instant markup, gradual increase, max guards on pirate routes
-// @author       https://github.com/justonlyforyou/
+// @author       https://github.com/PiratesTreasure
 // @order        12
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
 // @enabled      false
 // @background-job-required true
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // ==/UserScript==
 /* globals addMenuItem */
 
@@ -66,7 +66,7 @@
     // ========== REBELSHIPBRIDGE STORAGE (Own) ==========
     async function dbGet(key) {
         try {
-            var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             if (result) {
                 return JSON.parse(result);
             }
@@ -79,7 +79,7 @@
 
     async function dbSet(key, value) {
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
             return true;
         } catch (e) {
             console.error('[SmugglersEye] dbSet error:', e);
@@ -92,17 +92,17 @@
 
     async function getSharedCategory(category, retryCount) {
         // Use DepartManager's in-memory cache if available (eliminates race conditions)
-        if (window._rebelshipDMStorage && window._rebelshipDMStorage.isReady()) {
-            return window._rebelshipDMStorage.getCategory(category);
+        if (window._piratestreaureDMStorage && window._piratestreaureDMStorage.isReady()) {
+            return window._piratestreaureDMStorage.getCategory(category);
         }
         // Fallback: direct DB read (DepartManager not loaded yet)
         retryCount = retryCount || 0;
         try {
             // Try per-category key first
-            var value = await window.RebelShipBridge.storage.get('DepartManager', 'data', 'st_' + category);
+            var value = await window.PiratesTreasureBridge.storage.get('DepartManager', 'data', 'st_' + category);
             if (value) return JSON.parse(value);
             // Fallback: old blob format (pre-migration)
-            var blob = await window.RebelShipBridge.storage.get('DepartManager', 'data', 'storage');
+            var blob = await window.PiratesTreasureBridge.storage.get('DepartManager', 'data', 'storage');
             if (blob) {
                 var parsed = JSON.parse(blob);
                 return parsed[category] || {};
@@ -122,14 +122,14 @@
 
     async function saveSharedCategory(category, data, retryCount) {
         // Use DepartManager's debounced save if available (eliminates race conditions)
-        if (window._rebelshipDMStorage && window._rebelshipDMStorage.isReady()) {
-            window._rebelshipDMStorage.saveCategory(category, data);
+        if (window._piratestreaureDMStorage && window._piratestreaureDMStorage.isReady()) {
+            window._piratestreaureDMStorage.saveCategory(category, data);
             return true;
         }
         // Fallback: direct DB write (DepartManager not loaded yet)
         retryCount = retryCount || 0;
         try {
-            await window.RebelShipBridge.storage.set('DepartManager', 'data', 'st_' + category, JSON.stringify(data));
+            await window.PiratesTreasureBridge.storage.set('DepartManager', 'data', 'st_' + category, JSON.stringify(data));
             return true;
         } catch (e) {
             if (retryCount < RETRY_DELAYS.length) {
@@ -180,10 +180,10 @@
         try {
             var parsed = null;
             // Use DM's in-memory cache if available
-            if (window._rebelshipDMStorage && window._rebelshipDMStorage.isReady()) {
-                parsed = window._rebelshipDMStorage.getAutoPriceCache();
+            if (window._piratestreaureDMStorage && window._piratestreaureDMStorage.isReady()) {
+                parsed = window._piratestreaureDMStorage.getAutoPriceCache();
             } else {
-                var result = await window.RebelShipBridge.storage.get('DepartManager', 'data', 'autoPriceCache');
+                var result = await window.PiratesTreasureBridge.storage.get('DepartManager', 'data', 'autoPriceCache');
                 if (result) parsed = JSON.parse(result);
             }
             if (parsed) {
@@ -214,10 +214,10 @@
     async function saveAutoPriceCache() {
         try {
             // Use DM's API if available (writes through DM's cache)
-            if (window._rebelshipDMStorage) {
-                window._rebelshipDMStorage.saveAutoPriceCache(autoPriceCacheData);
+            if (window._piratestreaureDMStorage) {
+                window._piratestreaureDMStorage.saveAutoPriceCache(autoPriceCacheData);
             } else {
-                await window.RebelShipBridge.storage.set('DepartManager', 'data', 'autoPriceCache', JSON.stringify(autoPriceCacheData));
+                await window.PiratesTreasureBridge.storage.set('DepartManager', 'data', 'autoPriceCache', JSON.stringify(autoPriceCacheData));
             }
         } catch (e) {
             console.error('[SmugglersEye] saveAutoPriceCache error:', e);
@@ -719,9 +719,9 @@
     function sendSystemNotification(title, message) {
         if (!settings.notifySystem) return;
 
-        if (typeof window.RebelShipNotify !== 'undefined' && window.RebelShipNotify.notify) {
+        if (typeof window.PiratesTreasureNotify !== 'undefined' && window.PiratesTreasureNotify.notify) {
             try {
-                window.RebelShipNotify.notify(title + ': ' + message);
+                window.PiratesTreasureNotify.notify(title + ': ' + message);
                 return;
             } catch (e) {
                 log('System notification failed: ' + e.message, 'error');
@@ -845,9 +845,9 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('rebelship-menu-click', function() {
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (isModalOpen) {
-                log('RebelShip menu clicked, closing modal');
+                log('PiratesTreasure menu clicked, closing modal');
                 closeModal();
             }
         });
@@ -1122,8 +1122,8 @@
     }
 
     // Expose for Android BackgroundScriptService
-    if (!window.rebelshipRunSmugglersEye) {
-        window.rebelshipRunSmugglersEye = function() {
+    if (!window.piratestreaureRunSmugglersEye) {
+        window.piratestreaureRunSmugglersEye = function() {
             return loadSettings().then(function() {
                 if (!settings.enabled) {
                     return { skipped: true, reason: 'disabled' };
@@ -1133,7 +1133,7 @@
         };
     }
 
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -1142,11 +1142,11 @@
     }
 
     // Register for background job system
-    if (!window.rebelshipBackgroundJobs) {
-        window.rebelshipBackgroundJobs = [];
+    if (!window.piratestreaureBackgroundJobs) {
+        window.piratestreaureBackgroundJobs = [];
     }
-    window.rebelshipBackgroundJobs.push({
+    window.piratestreaureBackgroundJobs.push({
         name: 'SmugglersEye',
-        run: function() { return window.rebelshipRunSmugglersEye(); }
+        run: function() { return window.piratestreaureRunSmugglersEye(); }
     });
 })();

@@ -2,15 +2,15 @@
 // @name        ShippingManager - Auto Co-Op & Co-Op Header Display
 // @description Shows open Co-Op tickets, auto-sends COOP vessels to alliance members
 // @version     5.52
-// @author      https://github.com/justonlyforyou/
+// @author      https://github.com/PiratesTreasure
 // @order        3
 // @match       https://shippingmanager.cc/*
 // @grant       none
 // @run-at      document-end
 // @enabled     false
 // @background-job-required true
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // ==/UserScript==
 /* globals addMenuItem */
 
@@ -30,14 +30,15 @@
     var settings = {
         autoSendEnabled: false,
         notifyIngame: true,
-        notifySystem: false
+        notifySystem: false,
+        excludedMembers: []  // array of user_id strings to skip
     };
 
     // ========== REBELSHIPBRIDGE STORAGE ==========
 
     async function dbGet(key) {
         try {
-            var result = await window.RebelShipBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
+            var result = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, STORE_NAME, key);
             if (result) {
                 return JSON.parse(result);
             }
@@ -50,7 +51,7 @@
 
     async function dbSet(key, value) {
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, STORE_NAME, key, JSON.stringify(value));
             return true;
         } catch (e) {
             console.error('[' + SCRIPT_NAME + '] dbSet error:', e);
@@ -65,9 +66,13 @@
                 settings = {
                     autoSendEnabled: record.autoSendEnabled !== undefined ? record.autoSendEnabled : false,
                     notifyIngame: record.notifyIngame !== undefined ? record.notifyIngame : true,
-                    notifySystem: record.notifySystem !== undefined ? record.notifySystem : false
+                    notifySystem: record.notifySystem !== undefined ? record.notifySystem : false,
+                    excludedMembers: Array.isArray(record.excludedMembers) ? record.excludedMembers : []
                 };
             }
+            // Also load sent history
+            var history = await dbGet('sentHistory');
+            if (Array.isArray(history)) distState.sentHistory = history;
             return settings;
         } catch (e) {
             console.error('[' + SCRIPT_NAME + '] Failed to load settings:', e);
@@ -244,6 +249,11 @@
                 // Skip coop disabled (from members_coop.enabled)
                 if (member.enabled === false) { skippedReasons.disabled++; return false; }
 
+                // Skip manually excluded members
+                if (settings.excludedMembers && settings.excludedMembers.indexOf(String(member.user_id)) !== -1) {
+                    skippedReasons.disabled++; return false;
+                }
+
                 // Skip coop disabled (from get-member-settings.coop_enabled)
                 var userSettings = settingsMap[member.user_id];
                 if (userSettings && userSettings.coop_enabled === false) { skippedReasons.disabled++; return false; }
@@ -318,6 +328,7 @@
         distState.totalRequested = 0;
         distState.results = [];
         distState.retryPass = false;
+        distState.sentHistory = distState.sentHistory || [];
 
         // First tick immediately
         distributionTick();
@@ -484,6 +495,18 @@
             showToast('CoOp: All sends failed', 'error');
         }
 
+        // Save to history (keep last 50 entries)
+        if (distState.results.length > 0) {
+            if (!distState.sentHistory) distState.sentHistory = [];
+            distState.sentHistory.unshift({
+                time: new Date().toISOString(),
+                results: distState.results.slice()
+            });
+            if (distState.sentHistory.length > 50) distState.sentHistory.length = 50;
+            // Persist history
+            dbSet('sentHistory', distState.sentHistory).catch(function(){});
+        }
+
         distState.active = false;
         distState.members = [];
         distState.companyNameMap = {};
@@ -507,9 +530,9 @@
         if (!settings.notifySystem) return;
 
         // Android bridge
-        if (typeof window.RebelShipNotify !== 'undefined' && window.RebelShipNotify.notify) {
+        if (typeof window.PiratesTreasureNotify !== 'undefined' && window.PiratesTreasureNotify.notify) {
             try {
-                window.RebelShipNotify.notify(title + ': ' + message);
+                window.PiratesTreasureNotify.notify(title + ': ' + message);
                 return;
             } catch {
                 // Ignore notify errors
@@ -805,9 +828,9 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('rebelship-menu-click', function() {
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (isCoopModalOpen) {
-                log('RebelShip menu clicked, closing modal');
+                log('PiratesTreasure menu clicked, closing modal');
                 closeCoopModal();
             }
         });
@@ -903,77 +926,131 @@
         updateSettingsContent();
     }
 
-    function updateSettingsContent() {
+    function updateSettingsContent(activeTab) {
+        activeTab = activeTab || 'settings';
         var settingsContent = document.getElementById('coop-settings-content');
         if (!settingsContent) return;
 
-        settingsContent.innerHTML = '\
-            <div style="padding:20px;max-width:400px;margin:0 auto;font-family:Lato,sans-serif;color:#01125d;">\
-                <div style="margin-bottom:20px;">\
-                    <label style="display:flex;align-items:center;cursor:pointer;font-weight:700;font-size:16px;">\
-                        <input type="checkbox" id="fh-auto-send" ' + (settings.autoSendEnabled ? 'checked' : '') + '\
-                               style="width:20px;height:20px;margin-right:12px;accent-color:#0db8f4;cursor:pointer;">\
-                        <span>Auto-Send COOP Vessels</span>\
-                    </label>\
-                    <div style="font-size:12px;color:#626b90;margin-top:6px;margin-left:32px;">\
-                        Automatically distribute available COOP vessels to alliance members (largest fleets first)\
-                    </div>\
-                </div>\
-                <div style="margin-bottom:24px;">\
-                    <div style="font-weight:700;font-size:14px;margin-bottom:12px;color:#01125d;">Notifications</div>\
-                    <div style="display:flex;gap:24px;">\
-                        <label style="display:flex;align-items:center;cursor:pointer;">\
-                            <input type="checkbox" id="fh-notify-ingame" ' + (settings.notifyIngame ? 'checked' : '') + '\
-                                   style="width:18px;height:18px;margin-right:8px;accent-color:#0db8f4;cursor:pointer;">\
-                            <span style="font-size:13px;">Ingame</span>\
-                        </label>\
-                        <label style="display:flex;align-items:center;cursor:pointer;">\
-                            <input type="checkbox" id="fh-notify-system" ' + (settings.notifySystem ? 'checked' : '') + '\
-                                   style="width:18px;height:18px;margin-right:8px;accent-color:#0db8f4;cursor:pointer;">\
-                            <span style="font-size:13px;">System</span>\
-                        </label>\
-                    </div>\
-                </div>\
-                <div style="display:flex;gap:12px;justify-content:space-between;margin-top:30px;">\
-                    <button id="fh-run-now" style="padding:10px 24px;background:linear-gradient(180deg,#3b82f6,#1d4ed8);border:0;border-radius:6px;color:#fff;cursor:pointer;font-size:14px;font-weight:500;">' + (distState.active ? 'Stop' : 'Run Now') + '</button>\
-                    <button id="fh-save" style="padding:10px 24px;background:linear-gradient(180deg,#46ff33,#129c00);border:0;border-radius:6px;color:#fff;cursor:pointer;font-size:16px;font-weight:500;">Save</button>\
-                </div>\
-            </div>';
+        var excludedList = (settings.excludedMembers || []);
 
-        document.getElementById('fh-run-now').addEventListener('click', function() {
-            var btn = this;
-            if (distState.active) {
-                stopDistribution();
-                btn.textContent = 'Run Now';
-                btn.style.background = 'linear-gradient(180deg,#3b82f6,#1d4ed8)';
-                return;
-            }
-            btn.disabled = true;
-            btn.textContent = 'Starting...';
-            runAutoCoop(true).then(function(result) {
-                if (result && result.started) {
-                    btn.textContent = 'Stop';
-                    btn.style.background = 'linear-gradient(180deg,#ef4444,#b91c1c)';
-                    btn.disabled = false;
-                } else {
-                    btn.textContent = 'Run Now';
-                    btn.disabled = false;
+        // Tab styles
+        var tabStyle = 'padding:6px 14px;border:none;cursor:pointer;font-size:12px;font-weight:600;border-bottom:2px solid transparent;background:transparent;';
+        var activeTabStyle = tabStyle + 'border-bottom-color:#0db8f4;color:#0db8f4;';
+        var inactiveTabStyle = tabStyle + 'color:#626b90;';
+
+        var tabBar = '<div style="display:flex;border-bottom:1px solid #ddd;margin-bottom:0;">' +
+            '<button id="fh-tab-settings" style="' + (activeTab==='settings' ? activeTabStyle : inactiveTabStyle) + '">Settings</button>' +
+            '<button id="fh-tab-excluded" style="' + (activeTab==='excluded' ? activeTabStyle : inactiveTabStyle) + '">Excluded (' + excludedList.length + ')</button>' +
+            '<button id="fh-tab-history" style="' + (activeTab==='history' ? activeTabStyle : inactiveTabStyle) + '">Sent History</button>' +
+            '</div>';
+
+        var settingsTab = '<div style="padding:16px;">' +
+            '<div style="margin-bottom:16px;">' +
+            '<label style="display:flex;align-items:center;cursor:pointer;font-weight:700;font-size:14px;color:#01125d;">' +
+            '<input type="checkbox" id="fh-auto-send" ' + (settings.autoSendEnabled ? 'checked' : '') + ' style="width:18px;height:18px;margin-right:10px;accent-color:#0db8f4;cursor:pointer;">' +
+            'Auto-Send COOP Vessels</label>' +
+            '<div style="font-size:12px;color:#626b90;margin-top:4px;margin-left:28px;">Automatically distribute available COOP vessels to alliance members</div>' +
+            '</div>' +
+            '<div style="margin-bottom:16px;">' +
+            '<div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:#626b90;margin-bottom:8px;">Notifications</div>' +
+            '<div style="display:flex;gap:20px;">' +
+            '<label style="display:flex;align-items:center;cursor:pointer;font-size:13px;color:#01125d;">' +
+            '<input type="checkbox" id="fh-notify-ingame" ' + (settings.notifyIngame ? 'checked' : '') + ' style="width:16px;height:16px;margin-right:6px;accent-color:#0db8f4;">Ingame</label>' +
+            '<label style="display:flex;align-items:center;cursor:pointer;font-size:13px;color:#01125d;">' +
+            '<input type="checkbox" id="fh-notify-system" ' + (settings.notifySystem ? 'checked' : '') + ' style="width:16px;height:16px;margin-right:6px;accent-color:#0db8f4;">System</label>' +
+            '</div></div>' +
+            '<div style="display:flex;gap:10px;margin-top:20px;">' +
+            '<button id="fh-run-now" style="flex:1;padding:9px;background:#3b82f6;border:0;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">' + (distState.active ? '⏹ Stop' : '▶ Run Now') + '</button>' +
+            '<button id="fh-save" style="flex:1;padding:9px;background:#22c55e;border:0;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">Save</button>' +
+            '</div></div>';
+
+        var excludedTab = '<div style="padding:16px;">' +
+            '<div style="font-size:12px;color:#626b90;margin-bottom:10px;">Enter user IDs to exclude from auto-send, one per line or comma separated.</div>' +
+            '<textarea id="fh-excluded-input" style="width:100%;height:120px;padding:8px;border:1px solid #ccc;border-radius:4px;font-size:12px;font-family:monospace;resize:vertical;box-sizing:border-box;" placeholder="e.g. 12345, 67890">' + excludedList.join(', ') + '</textarea>' +
+
+            '<div style="margin-top:8px;font-size:11px;color:#626b90;">Currently excluding ' + excludedList.length + ' member(s)</div>' +
+            '<button id="fh-save-excluded" style="margin-top:12px;padding:8px 20px;background:#22c55e;border:0;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">Save Exclusions</button>' +
+            '</div>';
+
+        // Build history tab
+        var history = distState.sentHistory || [];
+        var historyHtml = '<div style="padding:16px;">';
+        if (history.length === 0) {
+            historyHtml += '<div style="color:#626b90;font-size:13px;text-align:center;padding:20px;">No sends recorded yet</div>';
+        } else {
+            history.forEach(function(entry) {
+                var d = new Date(entry.time);
+                var timeStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+                historyHtml += '<div style="margin-bottom:12px;border:1px solid #ddd;border-radius:6px;overflow:hidden;">';
+                historyHtml += '<div style="background:#e8e8e8;padding:6px 10px;font-weight:700;font-size:12px;color:#01125d;">' + timeStr + '</div>';
+                entry.results.forEach(function(r) {
+                    var colour = r.error ? '#ef4444' : (r.departed > 0 ? '#22c55e' : '#f59e0b');
+                    var text = r.error ? r.error : (r.departed + '/' + r.requested + ' vessels');
+                    historyHtml += '<div style="padding:5px 10px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:12px;">' +
+                        '<span style="color:#01125d;">' + (r.company_name || 'Unknown') + '</span>' +
+                        '<span style="color:' + colour + ';font-weight:600;">' + text + '</span>' +
+                        '</div>';
+                });
+                historyHtml += '</div>';
+            });
+        }
+        historyHtml += '</div>';
+
+        var tabContent = activeTab === 'settings' ? settingsTab : (activeTab === 'excluded' ? excludedTab : historyHtml);
+
+        settingsContent.innerHTML = tabBar + tabContent;
+
+        // Tab switching
+        document.getElementById('fh-tab-settings').addEventListener('click', function() { updateSettingsContent('settings'); });
+        document.getElementById('fh-tab-excluded').addEventListener('click', function() { updateSettingsContent('excluded'); });
+        document.getElementById('fh-tab-history').addEventListener('click', function() { updateSettingsContent('history'); });
+
+        // Settings tab handlers
+        if (activeTab === 'settings') {
+            document.getElementById('fh-run-now').addEventListener('click', function() {
+                var btn = this;
+                if (distState.active) {
+                    stopDistribution();
+                    btn.textContent = '▶ Run Now';
+                    btn.style.background = '#3b82f6';
+                    return;
                 }
+                btn.disabled = true;
+                btn.textContent = 'Starting...';
+                runAutoCoop(true).then(function(result) {
+                    if (result && result.started) {
+                        btn.textContent = '⏹ Stop';
+                        btn.style.background = '#ef4444';
+                        btn.disabled = false;
+                    } else {
+                        btn.textContent = '▶ Run Now';
+                        btn.disabled = false;
+                    }
+                });
             });
-        });
+            document.getElementById('fh-save').addEventListener('click', function() {
+                settings.autoSendEnabled = document.getElementById('fh-auto-send').checked;
+                settings.notifyIngame = document.getElementById('fh-notify-ingame').checked;
+                settings.notifySystem = document.getElementById('fh-notify-system').checked;
+                if (settings.notifySystem) requestNotificationPermission();
+                saveSettings().then(function() {
+                    showToast('CoOp settings saved', 'success');
+                    closeCoopModal();
+                });
+            });
+        }
 
-        document.getElementById('fh-save').addEventListener('click', function() {
-            settings.autoSendEnabled = document.getElementById('fh-auto-send').checked;
-            settings.notifyIngame = document.getElementById('fh-notify-ingame').checked;
-            settings.notifySystem = document.getElementById('fh-notify-system').checked;
-            if (settings.notifySystem) {
-                requestNotificationPermission();
-            }
-            saveSettings().then(function() {
-                showToast('CoOp settings saved', 'success');
-                closeCoopModal();
+        // Excluded tab handler
+        if (activeTab === 'excluded') {
+            document.getElementById('fh-save-excluded').addEventListener('click', function() {
+                var raw = document.getElementById('fh-excluded-input').value;
+                settings.excludedMembers = raw.split(/[,\n\r]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+                saveSettings().then(function() {
+                    showToast('Exclusions saved: ' + settings.excludedMembers.length + ' member(s)', 'success');
+                    updateSettingsContent('excluded');
+                });
             });
-        });
+        }
     }
 
     // ========== SCHEDULER ==========
@@ -1030,7 +1107,7 @@
     }
 
     // Expose for Android BackgroundScriptService
-    window.rebelshipRunAutoCoop = function() {
+    window.piratestreaureRunAutoCoop = function() {
         return loadSettings().then(function() {
             if (!settings.autoSendEnabled) return { skipped: true, reason: 'disabled' };
             return runAutoCoop();
@@ -1046,15 +1123,15 @@
     };
 
     // Listen for header resize event to reinitialize display
-    window.addEventListener('rebelship-header-resize', headerResizeHandler);
+    window.addEventListener('piratestreaure-header-resize', headerResizeHandler);
 
     // Optional: Cleanup-Funktion für Userscript-Neuladen
-    window.rebelshipCleanupAutoCoop = function() {
+    window.piratestreaureCleanupAutoCoop = function() {
         stopDistribution();
-        window.removeEventListener('rebelship-header-resize', headerResizeHandler);
+        window.removeEventListener('piratestreaure-header-resize', headerResizeHandler);
     };
 
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -1063,9 +1140,9 @@
     }
 
     // Register for background job system
-    window.rebelshipBackgroundJobs = window.rebelshipBackgroundJobs || [];
-    window.rebelshipBackgroundJobs.push({
+    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
+    window.piratestreaureBackgroundJobs.push({
         name: 'AutoCoop',
-        run: function() { return window.rebelshipRunAutoCoop(); }
+        run: function() { return window.piratestreaureRunAutoCoop(); }
     });
 })();

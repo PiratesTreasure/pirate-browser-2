@@ -4,13 +4,13 @@
 // @description  Automatic drydock management with bug prevention and moor option
 // @version      1.69
 // @order        4
-// @author       RebelShip
+// @author       PiratesTreasure
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-end
 // @enabled      false
-// @RequireRebelShipMenu true
-// @RequireRebelShipStorage true
+// @RequirePiratesTreasureMenu true
+// @RequirePiratesTreasureStorage true
 // @background-job-required true
 // ==/UserScript==
 /* globals addMenuItem */
@@ -69,8 +69,8 @@
     // ============================================
     // MODAL REGISTRY (shared across scripts)
     // ============================================
-    if (!window.RebelShipModalRegistry) {
-        window.RebelShipModalRegistry = {
+    if (!window.PiratesTreasureModalRegistry) {
+        window.PiratesTreasureModalRegistry = {
             openModals: new Set(),
             register: function(name) { this.openModals.add(name); },
             unregister: function(name) { this.openModals.delete(name); },
@@ -78,7 +78,7 @@
             hasAnyOpen: function() { return this.openModals.size > 0; },
             closeAll: function() {
                 this.openModals.forEach(function(name) {
-                    window.dispatchEvent(new CustomEvent('rebelship-close-modal', { detail: { name: name } }));
+                    window.dispatchEvent(new CustomEvent('piratestreaure-close-modal', { detail: { name: name } }));
                 });
             }
         };
@@ -100,9 +100,9 @@
     // STORAGE - Own settings, shared queue
     // ============================================
     async function dbGetOwn(key) {
-        if (!window.RebelShipBridge || !window.RebelShipBridge.storage) return null;
+        if (!window.PiratesTreasureBridge || !window.PiratesTreasureBridge.storage) return null;
         try {
-            var value = await window.RebelShipBridge.storage.get(SCRIPT_NAME, 'data', key);
+            var value = await window.PiratesTreasureBridge.storage.get(SCRIPT_NAME, 'data', key);
             return value ? JSON.parse(value) : null;
         } catch (e) {
             log('dbGetOwn error: ' + e.message, 'error');
@@ -111,9 +111,9 @@
     }
 
     async function dbSetOwn(key, value) {
-        if (!window.RebelShipBridge || !window.RebelShipBridge.storage) return;
+        if (!window.PiratesTreasureBridge || !window.PiratesTreasureBridge.storage) return;
         try {
-            await window.RebelShipBridge.storage.set(SCRIPT_NAME, 'data', key, JSON.stringify(value));
+            await window.PiratesTreasureBridge.storage.set(SCRIPT_NAME, 'data', key, JSON.stringify(value));
         } catch (e) {
             log('dbSetOwn error: ' + e.message, 'error');
         }
@@ -124,18 +124,18 @@
 
     async function getSharedCategory(category, retryCount) {
         // Use DepartManager's in-memory cache if available (eliminates race conditions)
-        if (window._rebelshipDMStorage && window._rebelshipDMStorage.isReady()) {
-            return window._rebelshipDMStorage.getCategory(category);
+        if (window._piratestreaureDMStorage && window._piratestreaureDMStorage.isReady()) {
+            return window._piratestreaureDMStorage.getCategory(category);
         }
         // Fallback: direct DB read (DepartManager not loaded yet)
         retryCount = retryCount || 0;
-        if (!window.RebelShipBridge || !window.RebelShipBridge.storage) return null;
+        if (!window.PiratesTreasureBridge || !window.PiratesTreasureBridge.storage) return null;
         try {
             // Try per-category key first
-            var value = await window.RebelShipBridge.storage.get('DepartManager', 'data', 'st_' + category);
+            var value = await window.PiratesTreasureBridge.storage.get('DepartManager', 'data', 'st_' + category);
             if (value) return JSON.parse(value);
             // Fallback: old blob format (pre-migration)
-            var blob = await window.RebelShipBridge.storage.get('DepartManager', 'data', 'storage');
+            var blob = await window.PiratesTreasureBridge.storage.get('DepartManager', 'data', 'storage');
             if (blob) {
                 var parsed = JSON.parse(blob);
                 return parsed[category] || {};
@@ -155,15 +155,15 @@
 
     async function saveSharedCategory(category, data, retryCount) {
         // Use DepartManager's debounced save if available (eliminates race conditions)
-        if (window._rebelshipDMStorage && window._rebelshipDMStorage.isReady()) {
-            window._rebelshipDMStorage.saveCategory(category, data);
+        if (window._piratestreaureDMStorage && window._piratestreaureDMStorage.isReady()) {
+            window._piratestreaureDMStorage.saveCategory(category, data);
             return true;
         }
         // Fallback: direct DB write (DepartManager not loaded yet)
         retryCount = retryCount || 0;
-        if (!window.RebelShipBridge || !window.RebelShipBridge.storage) return false;
+        if (!window.PiratesTreasureBridge || !window.PiratesTreasureBridge.storage) return false;
         try {
-            await window.RebelShipBridge.storage.set('DepartManager', 'data', 'st_' + category, JSON.stringify(data));
+            await window.PiratesTreasureBridge.storage.set('DepartManager', 'data', 'st_' + category, JSON.stringify(data));
             return true;
         } catch (e) {
             if (retryCount < RETRY_DELAYS.length) {
@@ -314,11 +314,11 @@
             }
         }
 
-        if (settings.notifySystem && window.RebelShipNotify && window.RebelShipNotify.notify) {
+        if (settings.notifySystem && window.PiratesTreasureNotify && window.PiratesTreasureNotify.notify) {
             try {
-                window.RebelShipNotify.notify(formattedMessage);
+                window.PiratesTreasureNotify.notify(formattedMessage);
             } catch (e) {
-                log('RebelShipNotify error: ' + e.message);
+                log('PiratesTreasureNotify error: ' + e.message);
             }
         }
     }
@@ -599,6 +599,35 @@
                 await restoreDrydockSettings(pastEntry.vesselId, pastEntry.data, pastVessel);
             }
         }
+
+        // Check pendingRouteSettings for moorOnArrival entries
+        var pendingSettings = await getSharedCategory('pendingRouteSettings');
+        if (pendingSettings) {
+            var pendingIds = Object.keys(pendingSettings);
+            for (var p = 0; p < pendingIds.length; p++) {
+                var pendingId = parseInt(pendingIds[p], 10);
+                var pendingData = pendingSettings[pendingIds[p]];
+                if (!pendingData || !pendingData.moorOnArrival) continue;
+
+                var pendingVessel = vesselMap.get(pendingId);
+                if (!pendingVessel) continue;
+
+                // Park the vessel when it arrives at port and is not already parked
+                if (pendingVessel.status === 'port' && !pendingVessel.is_parked) {
+                    log((pendingData.name || pendingId) + ': Arrived at port - mooring now');
+                    var moorResult = await parkVessel(pendingId);
+                    if (moorResult && moorResult.data) {
+                        log((pendingData.name || pendingId) + ': Moored on arrival');
+                        notify('Moored on arrival: ' + (pendingData.name || pendingId), 'success');
+                    } else {
+                        log((pendingData.name || pendingId) + ': Failed to moor on arrival', 'error');
+                    }
+                    // Remove the pending entry whether success or fail
+                    delete pendingSettings[pendingIds[p]];
+                    await saveSharedCategory('pendingRouteSettings', pendingSettings);
+                }
+            }
+        }
     }
 
     function handleVesselDataResponse(data) {
@@ -859,9 +888,9 @@
     }
 
     function setupDrydockModalWatcher() {
-        window.addEventListener('rebelship-menu-click', function() {
+        window.addEventListener('piratestreaure-menu-click', function() {
             if (isModalOpen) {
-                log('RebelShip menu clicked, closing modal');
+                log('PiratesTreasure menu clicked, closing modal');
                 closeModal();
             }
         });
@@ -1209,7 +1238,7 @@
     }
 
     // Expose for Android BackgroundScriptService
-    window.rebelshipRunAutoDrydock = function() {
+    window.piratestreaureRunAutoDrydock = function() {
         return loadSettings().then(function() {
             if (!settingsCache || !settingsCache.autoDrydockEnabled) {
                 return { skipped: true, reason: 'disabled' };
@@ -1218,7 +1247,7 @@
         });
     };
 
-    if (!window.__rebelshipHeadless) {
+    if (!window.__piratestreaureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -1227,9 +1256,9 @@
     }
 
     // Register for background job system
-    window.rebelshipBackgroundJobs = window.rebelshipBackgroundJobs || [];
-    window.rebelshipBackgroundJobs.push({
+    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
+    window.piratestreaureBackgroundJobs.push({
         name: 'AutoDrydock',
-        run: function() { return window.rebelshipRunAutoDrydock(); }
+        run: function() { return window.piratestreaureRunAutoDrydock(); }
     });
 })();

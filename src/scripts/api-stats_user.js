@@ -4,11 +4,11 @@
 // @description  Monitor all API calls to shippingmanager.cc in the background
 // @version      2.01
 // @order        1
-// @author       RebelShip
+// @author       PiratesTreasure
 // @match        https://shippingmanager.cc/*
 // @grant        none
 // @run-at       document-start
-// @RequireRebelShipMenu true
+// @RequirePiratesTreasureMenu true
 // @enabled      false
 // ==/UserScript==
 /* globals addMenuItem, XMLHttpRequest */
