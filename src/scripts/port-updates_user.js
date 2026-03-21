@@ -89,41 +89,22 @@
     }
 
     // ============================================
-    // RANKING DATA (reads from DemandSummary storage)
+    // RANKING DATA (fetches from GitHub)
     // ============================================
+    var GITHUB_DATA_URL = 'https://raw.githubusercontent.com/PiratesTreasure/pirate-dashboard/main/public/port_data.json';
+
     async function getRankingData() {
-        if (!window.PiratesTreasureBridge || !window.PiratesTreasureBridge.storage) return null;
         try {
-            var value = await window.PiratesTreasureBridge.storage.get('DemandSummary', 'data', 'rankingCache');
-            return value ? JSON.parse(value) : null;
+            var response = await fetch(GITHUB_DATA_URL, { cache: 'no-store' });
+            if (!response.ok) {
+                log('GitHub fetch failed: ' + response.status, 'error');
+                return null;
+            }
+            return await response.json();
         } catch (e) {
-            log('Failed to read ranking data: ' + e.message, 'error');
+            log('Failed to fetch ranking data: ' + e.message, 'error');
             return null;
         }
-    }
-
-    // ============================================
-    // PREVIOUS RANKINGS (for movement tracking)
-    // ============================================
-    async function getPreviousRankings() {
-        return await dbGet('previousRankings');
-    }
-
-    async function savePreviousRankings(rankings) {
-        await dbSet('previousRankings', rankings);
-    }
-
-    // Build a portCode -> rank map from current ranking data
-    function buildRankMap(rankingData) {
-        var map = {};
-        if (!rankingData || !rankingData.ports) return map;
-        for (var portCode in rankingData.ports) {
-            var portData = rankingData.ports[portCode];
-            if (portData.myAlliance && portData.myAlliance.rank) {
-                map[portCode] = portData.myAlliance.rank;
-            }
-        }
-        return map;
     }
 
     // ============================================
@@ -133,31 +114,29 @@
         return code.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
     }
 
-    function getMovementStr(currentRank, previousRank) {
-        if (previousRank == null) return ' NEW';
-        var diff = previousRank - currentRank;
-        if (diff > 0) return ' \u25B2' + (diff > 1 ? diff : '');  // ▲ or ▲N
-        if (diff < 0) return ' \u25BC' + (Math.abs(diff) > 1 ? Math.abs(diff) : '');  // ▼ or ▼N
+    function getMovementStr(rankChange) {
+        if (rankChange == null) return ' NEW';
+        // rank_change is current - previous, so negative means improved
+        if (rankChange < 0) return ' \u25B2' + (Math.abs(rankChange) > 1 ? Math.abs(rankChange) : '');  // ▲ or ▲N
+        if (rankChange > 0) return ' \u25BC' + (rankChange > 1 ? rankChange : '');  // ▼ or ▼N
         return '';
     }
 
-    function formatPortUpdateMessage(rankingData, threshold, previousRanks) {
-        if (!rankingData || !rankingData.ports) return null;
+    function formatPortUpdateMessage(rankingData, threshold) {
+        if (!rankingData || !rankingData.ports || !rankingData.ports.length) return null;
 
-        var ports = rankingData.ports;
-        var totalTracked = Object.keys(ports).length;
-        previousRanks = previousRanks || {};
+        var allPorts = rankingData.ports;
 
-        // Collect all ports where we have a rank within threshold
+        // Filter to ports within threshold
         var entries = [];
-        for (var portCode in ports) {
-            var portData = ports[portCode];
-            if (portData.myAlliance && portData.myAlliance.rank <= threshold) {
+        for (var i = 0; i < allPorts.length; i++) {
+            var p = allPorts[i];
+            if (p.rank != null && p.rank <= threshold) {
                 entries.push({
-                    code: portCode,
-                    name: capitalizePortName(portCode),
-                    rank: portData.myAlliance.rank,
-                    prevRank: previousRanks[portCode] != null ? previousRanks[portCode] : null
+                    code: p.port_code,
+                    name: p.port_name || capitalizePortName(p.port_code),
+                    rank: p.rank,
+                    rankChange: p.rank_change
                 });
             }
         }
@@ -178,9 +157,9 @@
             if (e.rank === 1) rank1Count++;
             if (e.rank <= 3) top3Count++;
             if (e.rank <= 10) top10Count++;
-            if (e.prevRank != null) {
-                if (e.rank < e.prevRank) improved++;
-                else if (e.rank > e.prevRank) dropped++;
+            if (e.rankChange != null) {
+                if (e.rankChange < 0) improved++;
+                else if (e.rankChange > 0) dropped++;
             }
         }
 
@@ -200,7 +179,7 @@
 
         // Overview
         lines.push('\uD83D\uDCCA Current Overview');
-        lines.push(totalTracked + ' ports tracked');
+        lines.push(allPorts.length + ' ports tracked');
         lines.push('\uD83E\uDD47 ' + rank1Count + ' Rank 1 ports');
         lines.push('\uD83C\uDFC5 ' + top3Count + ' Top 3 ports');
         lines.push('\uD83D\uDD1F ' + top10Count + ' Top 10 ports');
@@ -215,7 +194,7 @@
             lines.push('\uD83C\uDFC6 Rank 1 Ports');
             for (var r1 = 0; r1 < rank1Ports.length; r1++) {
                 var p1 = rank1Ports[r1];
-                lines.push(p1.name + getMovementStr(p1.rank, p1.prevRank));
+                lines.push(p1.name + getMovementStr(p1.rankChange));
             }
         }
 
@@ -225,7 +204,7 @@
             lines.push('\uD83E\uDD48 Rank 2 Ports');
             for (var r2 = 0; r2 < rank2Ports.length; r2++) {
                 var p2 = rank2Ports[r2];
-                lines.push(p2.name + getMovementStr(p2.rank, p2.prevRank));
+                lines.push(p2.name + getMovementStr(p2.rankChange));
             }
         }
 
@@ -235,7 +214,7 @@
             lines.push('\uD83E\uDD49 Rank 3 Ports');
             for (var r3 = 0; r3 < rank3Ports.length; r3++) {
                 var p3 = rank3Ports[r3];
-                lines.push(p3.name + getMovementStr(p3.rank, p3.prevRank));
+                lines.push(p3.name + getMovementStr(p3.rankChange));
             }
         }
 
@@ -245,7 +224,7 @@
             lines.push('\uD83D\uDCCD Chasing the Top');
             for (var c = 0; c < chasingPorts.length; c++) {
                 var pc = chasingPorts[c];
-                lines.push(pc.rank + ' \u2014 ' + pc.name + getMovementStr(pc.rank, pc.prevRank));
+                lines.push(pc.rank + ' \u2014 ' + pc.name + getMovementStr(pc.rankChange));
             }
         }
 
@@ -255,7 +234,7 @@
             lines.push('\uD83D\uDCCD Mid Table Movement');
             for (var m = 0; m < midTablePorts.length; m++) {
                 var pm = midTablePorts[m];
-                lines.push(pm.rank + ' \u2014 ' + pm.name + getMovementStr(pm.rank, pm.prevRank));
+                lines.push(pm.rank + ' \u2014 ' + pm.name + getMovementStr(pm.rankChange));
             }
         }
 
@@ -265,7 +244,7 @@
             lines.push('\uD83D\uDCCD Top 10 Battle');
             for (var t = 0; t < top10Ports.length; t++) {
                 var pt = top10Ports[t];
-                lines.push(pt.rank + ' \u2014 ' + pt.name + getMovementStr(pt.rank, pt.prevRank));
+                lines.push(pt.rank + ' \u2014 ' + pt.name + getMovementStr(pt.rankChange));
             }
         }
 
@@ -280,13 +259,12 @@
 
         var rankingData = await getRankingData();
         if (!rankingData) {
-            await sendResponse('No port ranking data available. Make sure Demand Summary has collected ranking data.', userId, isDm);
+            await sendResponse('No port ranking data available. Make sure the Alliance Tracker has run.', userId, isDm);
             return;
         }
 
-        var previousRanks = await getPreviousRankings() || {};
         var threshold = settings.rankThreshold || 10;
-        var message = formatPortUpdateMessage(rankingData, threshold, previousRanks);
+        var message = formatPortUpdateMessage(rankingData, threshold);
         if (!message) {
             await sendResponse('No ports found where the alliance ranks in the top ' + threshold + '.', userId, isDm);
             return;
@@ -307,21 +285,20 @@
         }
 
         var rankingData = await getRankingData();
-        if (!rankingData || !rankingData.timestamp) {
+        if (!rankingData || !rankingData.updated) {
             log('No ranking data for auto-post');
             return;
         }
 
         // Check if the ranking data timestamp has changed since last post
         var lastPostedTimestamp = await dbGet('lastPostedRankingTimestamp');
-        if (lastPostedTimestamp === rankingData.timestamp) {
-            log('Ranking data unchanged (timestamp: ' + rankingData.timestamp + '), skipping auto-post');
+        if (lastPostedTimestamp === rankingData.updated) {
+            log('Ranking data unchanged (timestamp: ' + rankingData.updated + '), skipping auto-post');
             return;
         }
 
-        var previousRanks = await getPreviousRankings() || {};
         var threshold = settings.rankThreshold || 10;
-        var message = formatPortUpdateMessage(rankingData, threshold, previousRanks);
+        var message = formatPortUpdateMessage(rankingData, threshold);
         if (!message) {
             log('No qualifying ports for auto-post');
             return;
@@ -330,11 +307,8 @@
         try {
             var sent = await window.PiratesTreasureChatBot.sendAllianceMessage(message);
             if (sent !== false) {
-                await dbSet('lastPostedRankingTimestamp', rankingData.timestamp);
-                // Save current rankings as previous for next comparison
-                var currentRanks = buildRankMap(rankingData);
-                await savePreviousRankings(currentRanks);
-                log('Auto-posted port update (new ranking timestamp: ' + rankingData.timestamp + ')');
+                await dbSet('lastPostedRankingTimestamp', rankingData.updated);
+                log('Auto-posted port update (new ranking timestamp: ' + rankingData.updated + ')');
             } else {
                 log('Failed to send auto-post', 'error');
             }
@@ -424,7 +398,7 @@
         // Info text
         var info = document.createElement('div');
         info.style.cssText = 'font-size:11px;color:#6b7280;margin-top:8px;margin-bottom:16px;';
-        info.textContent = 'Requires Demand Summary ranking data. ChatBot must be enabled for auto-post. Movement arrows compare against previous day.';
+        info.textContent = 'Reads ranking data from the Alliance Tracker. ChatBot must be enabled for auto-post. Movement arrows compare against previous run.';
         modal.appendChild(info);
 
         // Buttons
