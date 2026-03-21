@@ -2679,6 +2679,11 @@
                 continue;
             }
 
+            // Skip moorOnArrival entries — these belong to AutoDrydock and must persist until the vessel arrives
+            if (pending.moorOnArrival) {
+                continue;
+            }
+
             if (!vessel || !vessel.route_origin || !vessel.route_destination) {
                 delete storageCache.pendingRouteSettings[pendingKey];
                 removed++;

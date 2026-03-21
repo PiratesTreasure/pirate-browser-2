@@ -1309,7 +1309,14 @@ let updateReady = false;
 function initUpdater() {
   if (!window.pirate.updater) return;
 
-  window.pirate.updater.on('updater:update-available', (info) => {
+  window.pirate.updater.on('updater:update-available', async (info) => {
+    // Guard: skip if the "update" version matches the running version
+    const currentVer = (await window.pirate.app.version()).replace(/^v/i, '');
+    const updateVer  = (info.version || '').replace(/^v/i, '');
+    if (currentVer && updateVer && currentVer === updateVer) {
+      console.log('[Updater] Ignoring false update — already on v' + currentVer);
+      return;
+    }
     showUpdateModal(info);
   });
 

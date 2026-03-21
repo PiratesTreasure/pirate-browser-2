@@ -515,10 +515,10 @@
 
                 await saveDrydockVessel(vesselId, {
                     name: vessel.name,
-                    speed: vessel.route_speed,
-                    guards: vessel.route_guards,
-                    prices: vessel.prices,
-                    hoursAtDrydock: vessel.hours_until_check,
+                    speed: vessel.route_speed != null ? vessel.route_speed : vessel.max_speed,
+                    guards: vessel.route_guards != null ? vessel.route_guards : 0,
+                    prices: vessel.prices != null ? vessel.prices : {},
+                    hoursAtDrydock: vessel.hours_until_check != null ? vessel.hours_until_check : 0,
                     routeId: vessel.active_route ? vessel.active_route.route_id : null,
                     originPort: vessel.route_origin ? vessel.route_origin : vessel.current_port_code,
                     destinationPort: vessel.route_destination,
@@ -748,10 +748,13 @@
                             log(moorVessel.name + ': Moored');
                         }
                     } else {
-                        // Mark for mooring on arrival
+                        // Mark for mooring on arrival — include vessel data so DepartManager cleanup doesn't remove it
                         await savePendingRouteSettings(moorVessel.id, {
                             name: moorVessel.name,
-                            moorOnArrival: true
+                            moorOnArrival: true,
+                            speed: moorVessel.route_speed != null ? moorVessel.route_speed : moorVessel.max_speed,
+                            guards: moorVessel.route_guards != null ? moorVessel.route_guards : 0,
+                            prices: moorVessel.prices != null ? moorVessel.prices : {}
                         });
                         log(moorVessel.name + ': Marked for mooring on arrival');
                     }
@@ -810,10 +813,10 @@
 
                 await saveDrydockVessel(vessel.id, {
                     name: vessel.name,
-                    speed: vessel.route_speed || vessel.max_speed,
-                    guards: vessel.route_guards || 0,
-                    prices: vessel.prices || {},
-                    hoursAtDrydock: vessel.hours_until_check || 0,
+                    speed: vessel.route_speed != null ? vessel.route_speed : vessel.max_speed,
+                    guards: vessel.route_guards != null ? vessel.route_guards : 0,
+                    prices: vessel.prices != null ? vessel.prices : {},
+                    hoursAtDrydock: vessel.hours_until_check != null ? vessel.hours_until_check : 0,
                     routeId: vessel.active_route ? vessel.active_route.route_id : null,
                     originPort: vessel.route_origin || vessel.current_port_code,
                     destinationPort: vessel.route_destination,
