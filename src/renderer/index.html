@@ -648,7 +648,7 @@ webview.active { display: flex; }
 </div>
 
 <!-- UPDATE MODAL -->
-<div class="modal-overlay" id="update-modal" onclick="closeUpdateModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:none;align-items:center;justify-content:center;">
+<div class="modal-overlay" id="update-modal" onclick="closeUpdateModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;align-items:center;justify-content:center;">
   <div style="background:#0d1117;border:1px solid #1e2d42;border-radius:10px;width:520px;max-width:90vw;font-family:Inter,-apple-system,sans-serif;overflow:hidden;">
     <div style="padding:20px 24px 0;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
@@ -1338,6 +1338,7 @@ function initUpdater() {
     const btn = document.getElementById('update-action-btn');
     if (btn) {
       btn.textContent = '🚀 Restart & Install';
+      btn.disabled = false;
       btn.onclick = () => window.pirate.updater.install();
     }
     const txt = document.getElementById('update-progress-text');
@@ -1380,7 +1381,8 @@ function showUpdateModal(info) {
   const btn = document.getElementById('update-action-btn');
   if (btn) { btn.textContent = 'Download & Install'; btn.onclick = startUpdate; }
 
-  modal.style.display = 'flex';
+  // Don't auto-show modal — just show the titlebar button.
+  // User clicks the button to open the modal (avoids hiding webviews on launch).
 
   // Show persistent button in titlebar
   const updateBtn = document.getElementById('update-btn');
@@ -1389,13 +1391,26 @@ function showUpdateModal(info) {
 
 function openUpdateModal() {
   const modal = document.getElementById('update-modal');
-  if (modal) modal.style.display = 'flex';
+  if (!modal) return;
+  modal.style.display = 'flex';
+  modal.style.opacity = '1';
+  modal.style.pointerEvents = 'all';
+  // Webview tags render in a separate process layer that sits above DOM.
+  // We must fully hide the webview container to let the modal show through.
+  const container = document.getElementById('webview-container');
+  if (container) container.style.display = 'none';
 }
 
 function closeUpdateModal(e) {
   if (e && e.target !== document.getElementById('update-modal')) return;
   const modal = document.getElementById('update-modal');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.style.display = 'none';
+    modal.style.opacity = '0';
+    modal.style.pointerEvents = 'none';
+  }
+  const container = document.getElementById('webview-container');
+  if (container) container.style.display = '';
 }
 
 async function startUpdate() {
