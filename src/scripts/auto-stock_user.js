@@ -20,7 +20,7 @@
 
     var SCRIPT_NAME = 'AutoStock';
     var STORE_NAME = 'data';
-    var API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
 
     // Default Settings
     var DEFAULT_SETTINGS = {
@@ -685,7 +685,7 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isModalOpen) {
                 log('PiratesTreasure menu clicked, closing modal');
                 closeModal();
@@ -1599,10 +1599,10 @@
     var BACKGROUND_JOB_INTERVAL_MS = 6 * 60 * 1000; // 6 minutes
 
     function registerBackgroundJob() {
-        window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
+        window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
 
         // Check if already registered
-        var alreadyRegistered = window.piratestreaureBackgroundJobs.some(function(job) {
+        var alreadyRegistered = window.piratestreasureBackgroundJobs.some(function(job) {
             return job.name === 'AutoStock';
         });
         if (alreadyRegistered) {
@@ -1610,7 +1610,7 @@
             return;
         }
 
-        window.piratestreaureBackgroundJobs.push({
+        window.piratestreasureBackgroundJobs.push({
             name: 'AutoStock',
             run: async function() {
                 var now = Date.now();
@@ -1673,7 +1673,7 @@
         log('Auto Stock initialized');
     }
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {

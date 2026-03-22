@@ -687,7 +687,7 @@
         modalListenerAttached = true;
 
         // Listen for PiratesTreasure menu clicks to close our modal
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isForecastModalOpen) {
                 console.log('[Forecast] PiratesTreasure menu clicked, closing modal');
                 closeForecastModal();
@@ -1188,16 +1188,16 @@
 
     // Background job for Android BackgroundScriptService
     function registerBackgroundJob() {
-        window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
+        window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
 
-        var alreadyRegistered = window.piratestreaureBackgroundJobs.some(function(job) {
+        var alreadyRegistered = window.piratestreasureBackgroundJobs.some(function(job) {
             return job.name === 'ForecastAutoPost';
         });
         if (alreadyRegistered) {
             return;
         }
 
-        window.piratestreaureBackgroundJobs.push({
+        window.piratestreasureBackgroundJobs.push({
             name: 'ForecastAutoPost',
             run: async function() {
                 if (!window.PiratesTreasureChatBot || !window.PiratesTreasureChatBot.sendAllianceMessage) {
@@ -1299,7 +1299,7 @@
         setTimeout(registerChatBotCommands, 1000);
     }
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {

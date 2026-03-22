@@ -13,7 +13,7 @@
 /* globals MutationObserver */
 
 (function() {
-    var API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
     var injected = false;
     var dropdownOpen = false;
     var coordsCache = {};

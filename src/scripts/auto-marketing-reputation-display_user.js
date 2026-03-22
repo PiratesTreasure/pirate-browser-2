@@ -23,7 +23,7 @@
     var STORE_NAME = 'data';
 
     // API base URL (best practice: centralized API endpoint management)
-    var API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
 
     var reputationElement = null;
     var reputationValueElement = null;
@@ -374,7 +374,7 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isReputationModalOpen) {
                 log('PiratesTreasure menu clicked, closing modal');
                 closeReputationModal();
@@ -501,7 +501,7 @@
 
     // ========== UI: SETTINGS MODAL (Custom Game-style) ==========
     function openSettingsModal() {
-        var dropdown = document.getElementById('piratestreaure-dropdown');
+        var dropdown = document.getElementById('piratestreasure-dropdown');
         if (dropdown) dropdown.style.display = 'none';
 
         // Close any open game modal first
@@ -823,7 +823,7 @@
         }, 1000);
     }
 
-    window.addEventListener('piratestreaure-header-resize', function() {
+    window.addEventListener('piratestreasure-header-resize', function() {
         if (reputationElement && reputationElement.parentNode) {
             reputationElement.parentNode.removeChild(reputationElement);
         }
@@ -838,7 +838,7 @@
     });
 
     // ========== BACKGROUND JOB ==========
-    window.piratestreaureRunAutoMarketing = function() {
+    window.piratestreasureRunAutoMarketing = function() {
         if (!settings.autoRenewalEnabled) {
             return Promise.resolve({ skipped: true, reason: 'disabled' });
         }
@@ -849,14 +849,14 @@
         });
     };
 
-    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
+    window.piratestreasureBackgroundJobs.push({
         name: 'AutoMarketing',
         interval: 15 * 60 * 1000,
-        run: function() { return window.piratestreaureRunAutoMarketing(); }
+        run: function() { return window.piratestreasureRunAutoMarketing(); }
     });
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {

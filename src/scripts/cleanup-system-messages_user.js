@@ -118,7 +118,7 @@
     }
 
     async function deleteByFilter(filterFn, typeName) {
-        var dropdown = document.getElementById('piratestreaure-dropdown');
+        var dropdown = document.getElementById('piratestreasure-dropdown');
         if (dropdown) dropdown.style.display = 'none';
 
         var progressDiv = showProgress('Loading chats...');

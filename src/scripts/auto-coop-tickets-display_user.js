@@ -828,7 +828,7 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isCoopModalOpen) {
                 log('PiratesTreasure menu clicked, closing modal');
                 closeCoopModal();
@@ -1107,7 +1107,7 @@
     }
 
     // Expose for Android BackgroundScriptService
-    window.piratestreaureRunAutoCoop = function() {
+    window.piratestreasureRunAutoCoop = function() {
         return loadSettings().then(function() {
             if (!settings.autoSendEnabled) return { skipped: true, reason: 'disabled' };
             return runAutoCoop();
@@ -1123,15 +1123,15 @@
     };
 
     // Listen for header resize event to reinitialize display
-    window.addEventListener('piratestreaure-header-resize', headerResizeHandler);
+    window.addEventListener('piratestreasure-header-resize', headerResizeHandler);
 
     // Optional: Cleanup-Funktion für Userscript-Neuladen
-    window.piratestreaureCleanupAutoCoop = function() {
+    window.piratestreasureCleanupAutoCoop = function() {
         stopDistribution();
-        window.removeEventListener('piratestreaure-header-resize', headerResizeHandler);
+        window.removeEventListener('piratestreasure-header-resize', headerResizeHandler);
     };
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -1140,9 +1140,9 @@
     }
 
     // Register for background job system
-    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
+    window.piratestreasureBackgroundJobs.push({
         name: 'AutoCoop',
-        run: function() { return window.piratestreaureRunAutoCoop(); }
+        run: function() { return window.piratestreasureRunAutoCoop(); }
     });
 })();

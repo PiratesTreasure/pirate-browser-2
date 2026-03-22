@@ -19,7 +19,7 @@
     'use strict';
 
     var SCRIPT_NAME = 'AutoDrydock';
-    var API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
     var originalFetch = window.fetch;
 
     var isModalOpen = false;
@@ -66,23 +66,7 @@
         notifySystem: true
     };
 
-    // ============================================
-    // MODAL REGISTRY (shared across scripts)
-    // ============================================
-    if (!window.PiratesTreasureModalRegistry) {
-        window.PiratesTreasureModalRegistry = {
-            openModals: new Set(),
-            register: function(name) { this.openModals.add(name); },
-            unregister: function(name) { this.openModals.delete(name); },
-            isOpen: function(name) { return this.openModals.has(name); },
-            hasAnyOpen: function() { return this.openModals.size > 0; },
-            closeAll: function() {
-                this.openModals.forEach(function(name) {
-                    window.dispatchEvent(new CustomEvent('piratestreaure-close-modal', { detail: { name: name } }));
-                });
-            }
-        };
-    }
+    // Modal registry is provided by pirate-bridge_user.js (Order 0)
 
     // ============================================
     // LOGGING
@@ -124,8 +108,8 @@
 
     async function getSharedCategory(category, retryCount) {
         // Use DepartManager's in-memory cache if available (eliminates race conditions)
-        if (window._piratestreaureDMStorage && window._piratestreaureDMStorage.isReady()) {
-            return window._piratestreaureDMStorage.getCategory(category);
+        if (window._piratestreasureDMStorage && window._piratestreasureDMStorage.isReady()) {
+            return window._piratestreasureDMStorage.getCategory(category);
         }
         // Fallback: direct DB read (DepartManager not loaded yet)
         retryCount = retryCount || 0;
@@ -155,8 +139,8 @@
 
     async function saveSharedCategory(category, data, retryCount) {
         // Use DepartManager's debounced save if available (eliminates race conditions)
-        if (window._piratestreaureDMStorage && window._piratestreaureDMStorage.isReady()) {
-            window._piratestreaureDMStorage.saveCategory(category, data);
+        if (window._piratestreasureDMStorage && window._piratestreasureDMStorage.isReady()) {
+            window._piratestreasureDMStorage.saveCategory(category, data);
             return true;
         }
         // Fallback: direct DB write (DepartManager not loaded yet)
@@ -891,7 +875,7 @@
     }
 
     function setupDrydockModalWatcher() {
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isModalOpen) {
                 log('PiratesTreasure menu clicked, closing modal');
                 closeModal();
@@ -1241,7 +1225,7 @@
     }
 
     // Expose for Android BackgroundScriptService
-    window.piratestreaureRunAutoDrydock = function() {
+    window.piratestreasureRunAutoDrydock = function() {
         return loadSettings().then(function() {
             if (!settingsCache || !settingsCache.autoDrydockEnabled) {
                 return { skipped: true, reason: 'disabled' };
@@ -1250,7 +1234,7 @@
         });
     };
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -1259,9 +1243,9 @@
     }
 
     // Register for background job system
-    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
+    window.piratestreasureBackgroundJobs.push({
         name: 'AutoDrydock',
-        run: function() { return window.piratestreaureRunAutoDrydock(); }
+        run: function() { return window.piratestreasureRunAutoDrydock(); }
     });
 })();

@@ -25,10 +25,10 @@
     var CHECK_INTERVAL = 60 * 1000; // 60 seconds
     var CATCHUP_THRESHOLD = 2 * 60 * 1000; // 2 minutes - if more time passed, run immediate catch-up
     var RETRY_DELAYS = [500, 500, 500, 1000]; // 4 retries: 3x 500ms, then 1x 1000ms
-    var API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
 
     // Legacy key for Android settings sync
-    var OLD_STORAGE_KEY = 'piratestreaure_depart_manager';
+    var OLD_STORAGE_KEY = 'piratestreasure_depart_manager';
 
     // In-memory cache (loaded from Bridge storage)
     var storageCache = null;
@@ -276,6 +276,11 @@
         minUtilizationThreshold: 50,
         minUtilizationNotifyIngame: true,
         minUtilizationNotifySystem: false,
+        // Blackout Window Settings
+        blackoutEnabled: false,
+        blackoutStart: '02:00',
+        blackoutEnd: '04:00',
+        manualPauseActive: false,
         // Departure Tracking Settings
         contributionTrackingEnabled: false,
         // Speed Break-Even Settings
@@ -1123,7 +1128,7 @@
                 });
                 if (paTxs.length > 5000) paTxs.length = 5000;
                 localStorage.setItem(paTxKey, JSON.stringify(paTxs));
-            } catch {}
+            } catch (e) { log('PA tx log (fuel) failed: ' + e.message, 'warn'); }
 
             notify('Purchased ' + formatNumber(amountTons) + 't fuel @ $' + formatNumber(pricePerTon), 'success', 'fuel');
             return { success: true, data: data };
@@ -1176,7 +1181,7 @@
                 });
                 if (paTxs2.length > 5000) paTxs2.length = 5000;
                 localStorage.setItem(paTxKey2, JSON.stringify(paTxs2));
-            } catch {}
+            } catch (e) { log('PA tx log (co2) failed: ' + e.message, 'warn'); }
 
             notify('Purchased ' + formatNumber(amountTons) + 't CO2 @ $' + formatNumber(pricePerTon), 'success', 'co2');
             return { success: true, data: data };
@@ -2928,6 +2933,30 @@
     }
 
     // ============================================
+    // BLACKOUT WINDOW
+    // ============================================
+    function isBlackoutActive() {
+        var settings = getSettings();
+        if (settings.manualPauseActive) return true;
+        if (!settings.blackoutEnabled) return false;
+
+        var now = new Date();
+        var currentMinutes = now.getHours() * 60 + now.getMinutes();
+        var startParts = (settings.blackoutStart || '02:00').split(':');
+        var endParts = (settings.blackoutEnd || '04:00').split(':');
+        var startMinutes = parseInt(startParts[0], 10) * 60 + parseInt(startParts[1], 10);
+        var endMinutes = parseInt(endParts[0], 10) * 60 + parseInt(endParts[1], 10);
+
+        if (startMinutes <= endMinutes) {
+            // Same-day window (e.g. 02:00 - 04:00)
+            return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+        } else {
+            // Overnight window (e.g. 23:00 - 03:00)
+            return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+        }
+    }
+
+    // ============================================
     // AUTO-DEPART LOGIC
     // ============================================
     var autoDepartRunning = false;
@@ -2935,6 +2964,14 @@
     async function autoDepartVessels(manual) {
         var settings = getSettings();
         if (!manual && !settings.autoDepartEnabled) return { departed: 0 };
+
+        // Blackout window check (skip even manual runs during blackout)
+        if (isBlackoutActive()) {
+            var reason = settings.manualPauseActive ? 'manual pause active' : 'blackout window active';
+            log('Auto-depart skipped: ' + reason);
+            if (manual) notify('Departures paused (' + reason + ')', 'info');
+            return { departed: 0, blackout: true };
+        }
 
         if (autoDepartRunning) {
             log('Auto-depart already running');
@@ -4007,7 +4044,7 @@
         if (dmModalListenerAttached) return;
         dmModalListenerAttached = true;
 
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isDMSettingsModalOpen) {
                 log('PiratesTreasure menu clicked, closing DM modal');
                 closeDMSettingsModal();
@@ -4288,6 +4325,27 @@
             html += '<span style="font-size:12px;">System</span></label>';
             html += '</div>';
             html += '</div>';
+            // Blackout Window Settings
+            html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #ddd;">';
+            html += '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">Blackout Window</div>';
+            html += '<div style="font-size:12px;color:#666;margin-bottom:8px;">Pause all departures during a daily time window so coop players can send tickets.</div>';
+            html += '<div style="margin-bottom:8px;">';
+            html += '<label style="display:flex;align-items:center;cursor:pointer;">';
+            html += '<input type="checkbox" id="dm-blackout-enabled"' + (settings.blackoutEnabled ? ' checked' : '') + ' style="width:18px;height:18px;margin-right:10px;accent-color:#0db8f4;">';
+            html += '<span style="font-weight:600;">Enable Scheduled Blackout</span></label>';
+            html += '</div>';
+            html += '<div id="dm-blackout-times" style="display:' + (settings.blackoutEnabled ? 'flex' : 'none') + ';gap:12px;align-items:center;margin-bottom:8px;">';
+            html += '<label style="font-size:13px;font-weight:600;">Start</label>';
+            html += '<input type="time" id="dm-blackout-start" value="' + (settings.blackoutStart || '02:00') + '" style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">';
+            html += '<label style="font-size:13px;font-weight:600;">End</label>';
+            html += '<input type="time" id="dm-blackout-end" value="' + (settings.blackoutEnd || '04:00') + '" style="padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">';
+            html += '</div>';
+            html += '<div style="margin-top:8px;">';
+            html += '<button id="dm-manual-pause" style="padding:8px 16px;background:' + (settings.manualPauseActive ? 'linear-gradient(180deg,#ef4444,#b91c1c)' : 'linear-gradient(180deg,#f59e0b,#d97706)') + ';border:0;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">';
+            html += (settings.manualPauseActive ? '⏸ Paused — Click to Resume' : '⏸ Pause Departures Now');
+            html += '</button>';
+            html += '</div>';
+            html += '</div>';
             html += '</div>';
 
             // === CONTRIBUTION TRACKING ===
@@ -4366,6 +4424,30 @@
             updateFuelVisibility();
             updateCO2Visibility();
 
+            // Blackout visibility toggle
+            function updateBlackoutVisibility() {
+                var el = document.getElementById('dm-blackout-times');
+                if (el) el.style.display = document.getElementById('dm-blackout-enabled').checked ? 'flex' : 'none';
+            }
+            document.getElementById('dm-blackout-enabled').addEventListener('change', updateBlackoutVisibility);
+
+            // Manual pause toggle (saves immediately, no need to hit Save)
+            document.getElementById('dm-manual-pause').addEventListener('click', function() {
+                var currentSettings = getSettings();
+                currentSettings.manualPauseActive = !currentSettings.manualPauseActive;
+                saveSettings(currentSettings);
+                var btn = document.getElementById('dm-manual-pause');
+                if (currentSettings.manualPauseActive) {
+                    btn.textContent = '⏸ Paused — Click to Resume';
+                    btn.style.background = 'linear-gradient(180deg,#ef4444,#b91c1c)';
+                    notify('Departures paused', 'info');
+                } else {
+                    btn.textContent = '⏸ Pause Departures Now';
+                    btn.style.background = 'linear-gradient(180deg,#f59e0b,#d97706)';
+                    notify('Departures resumed', 'info');
+                }
+            });
+
             // Checkbox change listeners
             document.getElementById('dm-fuel-basic').addEventListener('change', updateFuelVisibility);
             document.getElementById('dm-fuel-intel').addEventListener('change', updateFuelVisibility);
@@ -4412,6 +4494,10 @@
                     autoDepartEnabled: document.getElementById('dm-auto-depart').checked,
                     departNotifyIngame: document.getElementById('dm-depart-notify-ingame').checked,
                     departNotifySystem: document.getElementById('dm-depart-notify-system').checked,
+                    blackoutEnabled: document.getElementById('dm-blackout-enabled').checked,
+                    blackoutStart: document.getElementById('dm-blackout-start').value || '02:00',
+                    blackoutEnd: document.getElementById('dm-blackout-end').value || '04:00',
+                    manualPauseActive: getSettings().manualPauseActive,
                     minUtilizationEnabled: document.getElementById('dm-min-util-enabled').checked,
                     minUtilizationThreshold: parseInt(document.getElementById('dm-min-util-threshold').value, 10) || 50,
                     minUtilizationNotifyIngame: document.getElementById('dm-min-util-notify-ingame').checked,
@@ -4676,7 +4762,7 @@
     // ============================================
     // EXPOSE FOR ANDROID BACKGROUND SERVICE
     // ============================================
-    window.piratestreaureRunDepartManager = async function() {
+    window.piratestreasureRunDepartManager = async function() {
         // Ensure storage is loaded (needed when called from background without init)
         if (!storageCache) {
             await loadStorage();
@@ -4772,7 +4858,7 @@
 
             // Expose shared storage API for cross-script access (smugglers-eye, auto-drydock)
             // Eliminates race conditions: all reads from RAM, writes through debounced save
-            window._piratestreaureDMStorage = {
+            window._piratestreasureDMStorage = {
                 isReady: function() { return storageCache !== null && dbConnectionVerified; },
                 get: function() { return storageCache; },
                 save: function(storage) { saveStorage(storage); },
@@ -4860,7 +4946,7 @@
         }
     }
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -4884,9 +4970,9 @@
     });
 
     // Register for background job system
-    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
+    window.piratestreasureBackgroundJobs.push({
         name: 'DepartManager',
-        run: async function() { return await window.piratestreaureRunDepartManager(); }
+        run: async function() { return await window.piratestreasureRunDepartManager(); }
     });
 })();

@@ -18,7 +18,7 @@
 
     // Inject interceptor script into page context (has access to Vue internals)
     var interceptorScript = document.createElement('script');
-    interceptorScript.textContent = '(function(){if(window._piratestreaureInterceptorInstalled)return;window._piratestreaureInterceptorInstalled=true;window._piratestreaureAllVessels=[];window._piratestreaureLastBuildConfig=null;function findBuildVesselComponent(){var buildElements=document.querySelectorAll("[id*=build-vessel], .vesselCard, .engineCard");for(var i=0;i<buildElements.length;i++){var el=buildElements[i];var comp=el.__vueParentComponent;while(comp){if(comp.proxy&&comp.proxy.vessel){console.log("[VesselCart] Found vessel in proxy");return comp.proxy.vessel}if(comp.data&&typeof comp.data==="object"&&comp.data.vessel){console.log("[VesselCart] Found vessel in data");return comp.data.vessel}if(comp.setupState&&comp.setupState.vessel){console.log("[VesselCart] Found vessel in setupState");return comp.setupState.vessel}comp=comp.parent}}var appEl=document.querySelector("#app");if(!appEl)return null;var app=appEl.__vue_app__;if(!app)return null;var visited=new Set();function searchTree(vnode){if(!vnode||visited.has(vnode))return null;visited.add(vnode);if(vnode.component){var c=vnode.component;if(c.proxy&&c.proxy.vessel&&(c.proxy.vessel.capacity_type!==undefined||c.proxy.vessel.engine_model!==undefined)){console.log("[VesselCart] Found vessel via tree search (proxy)");return c.proxy.vessel}if(c.setupState&&c.setupState.vessel){console.log("[VesselCart] Found vessel via tree search (setupState)");return c.setupState.vessel}if(c.subTree){var found=searchTree(c.subTree);if(found)return found}}if(vnode.children&&Array.isArray(vnode.children)){for(var j=0;j<vnode.children.length;j++){var f=searchTree(vnode.children[j]);if(f)return f}}if(vnode.dynamicChildren){for(var k=0;k<vnode.dynamicChildren.length;k++){var g=searchTree(vnode.dynamicChildren[k]);if(g)return g}}return null}var rootComponent=app._container._vnode;if(rootComponent){return searchTree(rootComponent)}return null}window._piratestreaureGetBuildConfig=function(){console.log("[VesselCart] _piratestreaureGetBuildConfig called");var buildSection=document.querySelector("#build-vessel-order-section, [id*=build-vessel]");if(!buildSection){console.log("[VesselCart] Not on build page (no build-vessel section found)");return null}var vesselData=findBuildVesselComponent();if(!vesselData){console.log("[VesselCart] Could not find vessel data in Vue components");return null}console.log("[VesselCart] Raw vessel data from Vue:",JSON.stringify(vesselData,null,2));var vesselType=vesselData.capacity_type||vesselData.vessel_model||null;console.log("[VesselCart] Vessel type:",vesselType);var capacity=0;if(vesselData.capacity!==undefined&&vesselData.capacity!==null){if(typeof vesselData.capacity==="number"){capacity=vesselData.capacity;if(vesselType==="tanker"){capacity=Math.round(capacity*74);console.log("[VesselCart] Tanker capacity converted: "+vesselData.capacity+" * 74 = "+capacity+" BBL")}}else if(typeof vesselData.capacity==="object"){if(vesselType==="tanker"){capacity=(vesselData.capacity.fuel||0)+(vesselData.capacity.crude_oil||0)}else{capacity=(vesselData.capacity.dry||0)+(vesselData.capacity.refrigerated||0)}}}if(capacity===0&&vesselData.capacity_max){if(vesselType==="tanker"){capacity=(vesselData.capacity_max.fuel||0)+(vesselData.capacity_max.crude_oil||0)}else{capacity=(vesselData.capacity_max.dry||0)+(vesselData.capacity_max.refrigerated||0)}}console.log("[VesselCart] Final capacity:",capacity);var config={name:vesselData.name||"Custom Vessel",ship_yard:vesselData.ship_yard||null,vessel_model:vesselType,engine_type:vesselData.engine_model?(vesselData.engine_model.type||vesselData.engine_model):null,engine_kw:vesselData.engine_model?(vesselData.engine_model.power||0):0,capacity:capacity,antifouling_model:vesselData.antifouling_model?(vesselData.antifouling_model.model||vesselData.antifouling_model):null,bulbous:vesselData.bulbous?1:0,enhanced_thrusters:vesselData.enhanced_thrusters?1:0,propeller_types:vesselData.propeller?(vesselData.propeller.model||vesselData.propeller):null,range:vesselData.range||null};var priceEl=document.querySelector(".price .amount p, .price p:last-child");if(priceEl){var priceText=priceEl.textContent.replace(/[^0-9]/g,"");config.price=parseInt(priceText)||0;console.log("[VesselCart] Found price from DOM:",config.price)}console.log("[VesselCart] Converted build config:",config);return config};var originalXHROpen=XMLHttpRequest.prototype.open;var originalXHRSend=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.open=function(method,url){this._url=url;this._method=method;return originalXHROpen.apply(this,arguments)};XMLHttpRequest.prototype.send=function(body){var self=this;if(this._url&&this._url.indexOf("/api/vessel/get-all-acquirable-vessels")!==-1){this.addEventListener("load",function(){try{var data=JSON.parse(self.responseText);if(data&&data.data&&data.data.vessels_for_sale){window._piratestreaureAllVessels=data.data.vessels_for_sale;console.log("[VesselCart Interceptor] Cached "+window._piratestreaureAllVessels.length+" vessels")}}catch(e){}})}if(this._url&&this._url.indexOf("/api/vessel/build-vessel")!==-1&&this._method==="POST"){try{window._piratestreaureLastBuildConfig=JSON.parse(body);console.log("[VesselCart Interceptor] Captured build config:",window._piratestreaureLastBuildConfig)}catch(e){}}return originalXHRSend.apply(this,arguments)};var originalFetch=window.fetch;window.fetch=function(){var url=typeof arguments[0]==="string"?arguments[0]:"";var options=arguments[1];if(url.indexOf("/api/vessel/build-vessel")!==-1&&options&&options.method==="POST"){try{window._piratestreaureLastBuildConfig=JSON.parse(options.body);console.log("[VesselCart Interceptor] Captured build config (fetch):",window._piratestreaureLastBuildConfig)}catch(e){}}return originalFetch.apply(this,arguments).then(function(response){if(url.indexOf("/api/vessel/get-all-acquirable-vessels")!==-1){var clone=response.clone();clone.json().then(function(data){if(data&&data.data&&data.data.vessels_for_sale){window._piratestreaureAllVessels=data.data.vessels_for_sale;console.log("[VesselCart Interceptor] Cached "+window._piratestreaureAllVessels.length+" vessels")}}).catch(function(){})}return response})};console.log("[VesselCart Interceptor] Installed with _piratestreaureGetBuildConfig")})();';
+    interceptorScript.textContent = '(function(){if(window._piratestreasureInterceptorInstalled)return;window._piratestreasureInterceptorInstalled=true;window._piratestreasureAllVessels=[];window._piratestreasureLastBuildConfig=null;function findBuildVesselComponent(){var buildElements=document.querySelectorAll("[id*=build-vessel], .vesselCard, .engineCard");for(var i=0;i<buildElements.length;i++){var el=buildElements[i];var comp=el.__vueParentComponent;while(comp){if(comp.proxy&&comp.proxy.vessel){console.log("[VesselCart] Found vessel in proxy");return comp.proxy.vessel}if(comp.data&&typeof comp.data==="object"&&comp.data.vessel){console.log("[VesselCart] Found vessel in data");return comp.data.vessel}if(comp.setupState&&comp.setupState.vessel){console.log("[VesselCart] Found vessel in setupState");return comp.setupState.vessel}comp=comp.parent}}var appEl=document.querySelector("#app");if(!appEl)return null;var app=appEl.__vue_app__;if(!app)return null;var visited=new Set();function searchTree(vnode){if(!vnode||visited.has(vnode))return null;visited.add(vnode);if(vnode.component){var c=vnode.component;if(c.proxy&&c.proxy.vessel&&(c.proxy.vessel.capacity_type!==undefined||c.proxy.vessel.engine_model!==undefined)){console.log("[VesselCart] Found vessel via tree search (proxy)");return c.proxy.vessel}if(c.setupState&&c.setupState.vessel){console.log("[VesselCart] Found vessel via tree search (setupState)");return c.setupState.vessel}if(c.subTree){var found=searchTree(c.subTree);if(found)return found}}if(vnode.children&&Array.isArray(vnode.children)){for(var j=0;j<vnode.children.length;j++){var f=searchTree(vnode.children[j]);if(f)return f}}if(vnode.dynamicChildren){for(var k=0;k<vnode.dynamicChildren.length;k++){var g=searchTree(vnode.dynamicChildren[k]);if(g)return g}}return null}var rootComponent=app._container._vnode;if(rootComponent){return searchTree(rootComponent)}return null}window._piratestreasureGetBuildConfig=function(){console.log("[VesselCart] _piratestreasureGetBuildConfig called");var buildSection=document.querySelector("#build-vessel-order-section, [id*=build-vessel]");if(!buildSection){console.log("[VesselCart] Not on build page (no build-vessel section found)");return null}var vesselData=findBuildVesselComponent();if(!vesselData){console.log("[VesselCart] Could not find vessel data in Vue components");return null}console.log("[VesselCart] Raw vessel data from Vue:",JSON.stringify(vesselData,null,2));var vesselType=vesselData.capacity_type||vesselData.vessel_model||null;console.log("[VesselCart] Vessel type:",vesselType);var capacity=0;if(vesselData.capacity!==undefined&&vesselData.capacity!==null){if(typeof vesselData.capacity==="number"){capacity=vesselData.capacity;if(vesselType==="tanker"){capacity=Math.round(capacity*74);console.log("[VesselCart] Tanker capacity converted: "+vesselData.capacity+" * 74 = "+capacity+" BBL")}}else if(typeof vesselData.capacity==="object"){if(vesselType==="tanker"){capacity=(vesselData.capacity.fuel||0)+(vesselData.capacity.crude_oil||0)}else{capacity=(vesselData.capacity.dry||0)+(vesselData.capacity.refrigerated||0)}}}if(capacity===0&&vesselData.capacity_max){if(vesselType==="tanker"){capacity=(vesselData.capacity_max.fuel||0)+(vesselData.capacity_max.crude_oil||0)}else{capacity=(vesselData.capacity_max.dry||0)+(vesselData.capacity_max.refrigerated||0)}}console.log("[VesselCart] Final capacity:",capacity);var config={name:vesselData.name||"Custom Vessel",ship_yard:vesselData.ship_yard||null,vessel_model:vesselType,engine_type:vesselData.engine_model?(vesselData.engine_model.type||vesselData.engine_model):null,engine_kw:vesselData.engine_model?(vesselData.engine_model.power||0):0,capacity:capacity,antifouling_model:vesselData.antifouling_model?(vesselData.antifouling_model.model||vesselData.antifouling_model):null,bulbous:vesselData.bulbous?1:0,enhanced_thrusters:vesselData.enhanced_thrusters?1:0,propeller_types:vesselData.propeller?(vesselData.propeller.model||vesselData.propeller):null,range:vesselData.range||null};var priceEl=document.querySelector(".price .amount p, .price p:last-child");if(priceEl){var priceText=priceEl.textContent.replace(/[^0-9]/g,"");config.price=parseInt(priceText)||0;console.log("[VesselCart] Found price from DOM:",config.price)}console.log("[VesselCart] Converted build config:",config);return config};var originalXHROpen=XMLHttpRequest.prototype.open;var originalXHRSend=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.open=function(method,url){this._url=url;this._method=method;return originalXHROpen.apply(this,arguments)};XMLHttpRequest.prototype.send=function(body){var self=this;if(this._url&&this._url.indexOf("/api/vessel/get-all-acquirable-vessels")!==-1){this.addEventListener("load",function(){try{var data=JSON.parse(self.responseText);if(data&&data.data&&data.data.vessels_for_sale){window._piratestreasureAllVessels=data.data.vessels_for_sale;console.log("[VesselCart Interceptor] Cached "+window._piratestreasureAllVessels.length+" vessels")}}catch(e){}})}if(this._url&&this._url.indexOf("/api/vessel/build-vessel")!==-1&&this._method==="POST"){try{window._piratestreasureLastBuildConfig=JSON.parse(body);console.log("[VesselCart Interceptor] Captured build config:",window._piratestreasureLastBuildConfig)}catch(e){}}return originalXHRSend.apply(this,arguments)};var originalFetch=window.fetch;window.fetch=function(){var url=typeof arguments[0]==="string"?arguments[0]:"";var options=arguments[1];if(url.indexOf("/api/vessel/build-vessel")!==-1&&options&&options.method==="POST"){try{window._piratestreasureLastBuildConfig=JSON.parse(options.body);console.log("[VesselCart Interceptor] Captured build config (fetch):",window._piratestreasureLastBuildConfig)}catch(e){}}return originalFetch.apply(this,arguments).then(function(response){if(url.indexOf("/api/vessel/get-all-acquirable-vessels")!==-1){var clone=response.clone();clone.json().then(function(data){if(data&&data.data&&data.data.vessels_for_sale){window._piratestreasureAllVessels=data.data.vessels_for_sale;console.log("[VesselCart Interceptor] Cached "+window._piratestreasureAllVessels.length+" vessels")}}).catch(function(){})}return response})};console.log("[VesselCart Interceptor] Installed with _piratestreasureGetBuildConfig")})();';
     (document.head || document.documentElement).appendChild(interceptorScript);
     interceptorScript.remove();
 
@@ -335,8 +335,8 @@
 
     // Get build configuration from injected script
     function getBuildConfig() {
-        if (typeof window._piratestreaureGetBuildConfig === 'function') {
-            var config = window._piratestreaureGetBuildConfig();
+        if (typeof window._piratestreasureGetBuildConfig === 'function') {
+            var config = window._piratestreasureGetBuildConfig();
             if (config) {
                 return config;
             }
@@ -363,7 +363,7 @@
             }
         }
 
-        var allVessels = Array.isArray(window._piratestreaureAllVessels) ? window._piratestreaureAllVessels : [];
+        var allVessels = Array.isArray(window._piratestreasureAllVessels) ? window._piratestreasureAllVessels : [];
         var vesselName2 = getVesselNameFromUI();
 
         if (!vesselName2) {
@@ -457,7 +457,7 @@
     // Show notification (game style)
     function showNotification(message, type) {
         type = type || 'success';
-        var existing = document.getElementById('piratestreaure-notification');
+        var existing = document.getElementById('piratestreasure-notification');
         if (existing) existing.remove();
 
         var colors = {
@@ -467,7 +467,7 @@
         };
 
         var notif = document.createElement('div');
-        notif.id = 'piratestreaure-notification';
+        notif.id = 'piratestreasure-notification';
         notif.textContent = message;
         notif.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:' + colors[type] + ';color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:500;z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.3);animation:slideDown 0.3s ease;';
 
@@ -477,7 +477,7 @@
 
     // Create standalone cart button
     function createCartButton() {
-        if (document.getElementById('piratestreaure-cart-btn')) return;
+        if (document.getElementById('piratestreasure-cart-btn')) return;
 
         var cart = getCartSync();
         var cartKeys = Object.keys(cart);
@@ -487,29 +487,29 @@
         }
 
         var btn = document.createElement('button');
-        btn.id = 'piratestreaure-cart-btn';
-        btn.innerHTML = CART_ICON + ' <span id="piratestreaure-cart-count">(' + count + ')</span>';
+        btn.id = 'piratestreasure-cart-btn';
+        btn.innerHTML = CART_ICON + ' <span id="piratestreasure-cart-count">(' + count + ')</span>';
         btn.title = 'Shopping Cart - Click to open';
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
             showCartModal();
         });
 
-        var piratestreaureMenu = document.getElementById('piratestreaure-menu');
-        if (!piratestreaureMenu) {
+        var piratestreasureMenu = document.getElementById('piratestreasure-menu');
+        if (!piratestreasureMenu) {
             var messagingIcon = document.querySelector('div.messaging.cursor-pointer');
             if (!messagingIcon) messagingIcon = document.querySelector('.messaging');
             if (!messagingIcon) {
                 setTimeout(createCartButton, 1000);
                 return;
             }
-            piratestreaureMenu = messagingIcon;
+            piratestreasureMenu = messagingIcon;
         }
 
         btn.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:4px 8px;background:transparent;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:16px;margin-right:4px !important;margin-left:4px !important;';
 
-        if (piratestreaureMenu.parentNode) {
-            piratestreaureMenu.parentNode.insertBefore(btn, piratestreaureMenu);
+        if (piratestreasureMenu.parentNode) {
+            piratestreasureMenu.parentNode.insertBefore(btn, piratestreasureMenu);
         }
 
     }
@@ -523,7 +523,7 @@
             totalItems += cart[cartKeys[i]].quantity;
         }
 
-        var cartCount = document.getElementById('piratestreaure-cart-count');
+        var cartCount = document.getElementById('piratestreasure-cart-count');
         if (cartCount) {
             cartCount.textContent = '(' + totalItems + ')';
         }
@@ -611,7 +611,7 @@
             var canAfford = canAffordCash && canAffordPoints;
 
             var overlay = document.createElement('div');
-            overlay.id = 'piratestreaure-cart-overlay';
+            overlay.id = 'piratestreasure-cart-overlay';
             overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99998;display:flex;align-items:center;justify-content:center;';
 
             var modal = document.createElement('div');
@@ -763,7 +763,7 @@
             overlay.appendChild(modal);
             document.body.appendChild(overlay);
 
-            var dropdown = document.getElementById('piratestreaure-dropdown');
+            var dropdown = document.getElementById('piratestreasure-dropdown');
             if (dropdown) dropdown.style.display = 'none';
 
             // Event delegation: single click handler instead of N per-element listeners
@@ -845,10 +845,10 @@
 
         // Check cached vessels before API call
         var cachedVessel = null;
-        if (Array.isArray(window._piratestreaureAllVessels)) {
-            for (var ci = 0; ci < window._piratestreaureAllVessels.length; ci++) {
-                if (window._piratestreaureAllVessels[ci].id === vessel.id) {
-                    cachedVessel = window._piratestreaureAllVessels[ci];
+        if (Array.isArray(window._piratestreasureAllVessels)) {
+            for (var ci = 0; ci < window._piratestreasureAllVessels.length; ci++) {
+                if (window._piratestreasureAllVessels[ci].id === vessel.id) {
+                    cachedVessel = window._piratestreasureAllVessels[ci];
                     break;
                 }
             }

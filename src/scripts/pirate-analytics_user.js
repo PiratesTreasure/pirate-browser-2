@@ -14,7 +14,7 @@
     var SCRIPT_NAME  = 'PirateAnalytics';
     var STORE_NAME   = 'data';
     var MAX_TX_AGE_DAYS = 90;
-    var API_BASE     = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
 
     // ── Storage helpers (direct localStorage - no PiratesTreasureBridge dependency) ──
     var LS_PREFIX = 'pirate:' + SCRIPT_NAME + ':' + STORE_NAME + ':';
@@ -39,15 +39,16 @@
             txs.unshift(entry);
             var cutoff = Date.now() - (MAX_TX_AGE_DAYS * 86400000);
             txs = txs.filter(function(t) { return t.timestamp >= cutoff; });
-            if (txs.length > 5000) txs.length = 5000;
+            if (txs.length > 2000) txs.length = 2000;
             dbSet('transactions', txs);
-        } catch {}
+        } catch (e) { if (window.PirateLog) window.PirateLog.warn('PirateAnalytics', 'logTransaction failed', e); }
     }
 
     // ── Cash monitor ─────────────────────────────────────────────
     // Polls Pinia store for cash changes and logs outgoing transactions
     var lastKnownCash = null;
     var cashPollInterval = null;
+    var contribPollInterval = null;
 
     function getCashFromPinia() {
         try {
@@ -103,12 +104,24 @@
                         });
                         var cutoff = now - (MAX_TX_AGE_DAYS * 86400000);
                         txs = txs.filter(function(t) { return t.timestamp >= cutoff; });
-                        if (txs.length > 5000) txs.length = 5000;
+                        if (txs.length > 2000) txs.length = 2000;
                     }
                     dbSet('transactions', txs);
-                } catch {}
+                } catch (e) { if (window.PirateLog) window.PirateLog.warn('PirateAnalytics', 'cashMonitor tx update failed', e); }
             }
-        }, 800);
+        }, 2500);
+    }
+
+    function stopCashMonitor() {
+        if (cashPollInterval) { clearInterval(cashPollInterval); cashPollInterval = null; }
+        if (contribPollInterval) { clearInterval(contribPollInterval); contribPollInterval = null; }
+    }
+
+    // Cleanup intervals on page unload to prevent memory leaks
+    if (window.PirateCleanup) {
+        window.PirateCleanup.register('PirateAnalytics', stopCashMonitor);
+    } else {
+        window.addEventListener('beforeunload', stopCashMonitor);
     }
 
     setTimeout(startCashMonitor, 3000);
@@ -182,7 +195,7 @@
         getPaUserAndAlliance();
         if (paAllianceId) {
             updateCachedContrib();
-            setInterval(updateCachedContrib, 120000);
+            contribPollInterval = setInterval(updateCachedContrib, 120000);
         }
     }, 8000);
 

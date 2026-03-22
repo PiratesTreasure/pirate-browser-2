@@ -22,7 +22,7 @@
     var STORE_NAME = 'data';
 
     var CHECK_INTERVAL = 15 * 60 * 1000;
-    var API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
 
     var DEFAULT_SETTINGS = {
         enabled: false,
@@ -759,7 +759,7 @@
             }
         };
 
-        window.addEventListener('piratestreaure-menu-click', menuClickListener);
+        window.addEventListener('piratestreasure-menu-click', menuClickListener);
     }
 
     function openSettingsModal() {
@@ -1043,12 +1043,12 @@
         removeHappyModalStyles();
 
         if (menuClickListener) {
-            window.removeEventListener('piratestreaure-menu-click', menuClickListener);
+            window.removeEventListener('piratestreasure-menu-click', menuClickListener);
             menuClickListener = null;
         }
 
         if (headerResizeListener) {
-            window.removeEventListener('piratestreaure-header-resize', headerResizeListener);
+            window.removeEventListener('piratestreasure-header-resize', headerResizeListener);
             headerResizeListener = null;
         }
 
@@ -1065,7 +1065,7 @@
     }
 
     // Expose for Android BackgroundScriptService
-    window.piratestreaureRunAutoHappyStaff = async function() {
+    window.piratestreasureRunAutoHappyStaff = async function() {
         var settings = loadSettings();
         if (!settings.enabled) {
             return { skipped: true, reason: 'disabled' };
@@ -1075,7 +1075,7 @@
     };
 
     // Expose cleanup for manual cleanup
-    window.piratestreaureCleanupAutoHappyStaff = cleanup;
+    window.piratestreasureCleanupAutoHappyStaff = cleanup;
 
     // Listen for header resize event to reinitialize display
     headerResizeListener = function() {
@@ -1092,9 +1092,9 @@
         }, 300);
     };
 
-    window.addEventListener('piratestreaure-header-resize', headerResizeListener);
+    window.addEventListener('piratestreasure-header-resize', headerResizeListener);
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -1103,9 +1103,9 @@
     }
 
     // Register for background job system
-    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
+    window.piratestreasureBackgroundJobs.push({
         name: 'AutoHappyStaff',
-        run: async function() { return await window.piratestreaureRunAutoHappyStaff(); }
+        run: async function() { return await window.piratestreasureRunAutoHappyStaff(); }
     });
 })();

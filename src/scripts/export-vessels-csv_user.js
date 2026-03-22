@@ -73,7 +73,7 @@
     }
 
     function exportVessels() {
-        var dropdown = document.getElementById('piratestreaure-dropdown');
+        var dropdown = document.getElementById('piratestreasure-dropdown');
         if (dropdown) dropdown.style.display = 'none';
 
         fetch('https://shippingmanager.cc/api/vessel/get-all-user-vessels', {

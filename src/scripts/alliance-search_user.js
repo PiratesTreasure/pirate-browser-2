@@ -448,7 +448,7 @@
         console.log('[AllianceSearch] Opening custom dialog');
 
         // Load alliances into cache BEFORE setting modal flag
-        // (piratestreaure-menu-click fires during await and would close the modal immediately)
+        // (piratestreasure-menu-click fires during await and would close the modal immediately)
         if (!cachedAlliances) {
             cachedAlliances = await getStoredAlliances();
         }
@@ -468,7 +468,7 @@
         isAllianceSearchModalOpen = false;
         window.PiratesTreasureModalRegistry.unregister(SCRIPT_NAME);
 
-        var modalWrapper = document.getElementById('piratestreaure-modal-wrapper');
+        var modalWrapper = document.getElementById('piratestreasure-modal-wrapper');
         if (modalWrapper) {
             modalWrapper.classList.add('hide');
         }
@@ -482,7 +482,7 @@
 
         // Listen for PiratesTreasure menu clicks to close our dialog
         // (but not when our own menu item just opened it — timing guard prevents race condition)
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isAllianceSearchModalOpen && (Date.now() - modalOpenedAt > 500)) {
                 console.log('[AllianceSearch] PiratesTreasure menu clicked, closing dialog');
                 closeAllianceSearchModal();
@@ -492,10 +492,10 @@
 
     // Inject game-identical modal CSS (1:1 copy from app.css)
     function injectModalStyles() {
-        if (document.getElementById('piratestreaure-modal-styles')) return;
+        if (document.getElementById('piratestreasure-modal-styles')) return;
 
         var style = document.createElement('style');
-        style.id = 'piratestreaure-modal-styles';
+        style.id = 'piratestreasure-modal-styles';
         style.textContent = [
             // Animations (exact copy from game)
             '@keyframes rs-fade-in{0%{opacity:0}to{opacity:1}}',
@@ -504,43 +504,43 @@
             '@keyframes rs-push-up{0%{transform:translateY(0)}to{transform:translateY(-10px)}}',
 
             // Modal wrapper (exact copy from game #modal-wrapper) - align-items:flex-start to position from top
-            '#piratestreaure-modal-wrapper{align-items:flex-start;display:flex;height:100vh;justify-content:center;left:0;overflow:hidden;position:absolute;top:0;width:100vw;z-index:9999}',
+            '#piratestreasure-modal-wrapper{align-items:flex-start;display:flex;height:100vh;justify-content:center;left:0;overflow:hidden;position:absolute;top:0;width:100vw;z-index:9999}',
 
             // Modal background (exact copy from game #modal-wrapper #modal-background)
-            '#piratestreaure-modal-wrapper #piratestreaure-modal-background{animation:rs-fade-in .15s linear forwards;background-color:rgba(0,0,0,.5);height:100%;left:0;opacity:0;position:absolute;top:0;width:100%}',
-            '#piratestreaure-modal-wrapper.hide #piratestreaure-modal-background{animation:rs-fade-out .15s linear forwards}',
+            '#piratestreasure-modal-wrapper #piratestreasure-modal-background{animation:rs-fade-in .15s linear forwards;background-color:rgba(0,0,0,.5);height:100%;left:0;opacity:0;position:absolute;top:0;width:100%}',
+            '#piratestreasure-modal-wrapper.hide #piratestreasure-modal-background{animation:rs-fade-out .15s linear forwards}',
 
             // Modal content wrapper (exact copy from game #modal-wrapper #modal-content-wrapper)
-            '#piratestreaure-modal-wrapper #piratestreaure-modal-content-wrapper{animation:rs-drop-down .15s linear forwards,rs-fade-in .15s linear forwards;height:100%;max-width:700px;opacity:0;position:relative;width:1140px;z-index:9001}',
-            '#piratestreaure-modal-wrapper.hide #piratestreaure-modal-content-wrapper{animation:rs-push-up .15s linear forwards,rs-fade-out .15s linear forwards}',
+            '#piratestreasure-modal-wrapper #piratestreasure-modal-content-wrapper{animation:rs-drop-down .15s linear forwards,rs-fade-in .15s linear forwards;height:100%;max-width:700px;opacity:0;position:relative;width:1140px;z-index:9001}',
+            '#piratestreasure-modal-wrapper.hide #piratestreasure-modal-content-wrapper{animation:rs-push-up .15s linear forwards,rs-fade-out .15s linear forwards}',
 
             // Media queries for content wrapper (exact copy from game)
-            '@media screen and (min-width:1200px){#piratestreaure-modal-wrapper #piratestreaure-modal-content-wrapper{max-width:460px}}',
-            '@media screen and (min-width:992px) and (max-width:1199px){#piratestreaure-modal-wrapper #piratestreaure-modal-content-wrapper{max-width:460px}}',
-            '@media screen and (min-width:769px) and (max-width:991px){#piratestreaure-modal-wrapper #piratestreaure-modal-content-wrapper{max-width:460px}}',
-            '@media screen and (max-width:768px){#piratestreaure-modal-wrapper #piratestreaure-modal-content-wrapper{max-width:100%}}',
+            '@media screen and (min-width:1200px){#piratestreasure-modal-wrapper #piratestreasure-modal-content-wrapper{max-width:460px}}',
+            '@media screen and (min-width:992px) and (max-width:1199px){#piratestreasure-modal-wrapper #piratestreasure-modal-content-wrapper{max-width:460px}}',
+            '@media screen and (min-width:769px) and (max-width:991px){#piratestreasure-modal-wrapper #piratestreasure-modal-content-wrapper{max-width:460px}}',
+            '@media screen and (max-width:768px){#piratestreasure-modal-wrapper #piratestreasure-modal-content-wrapper{max-width:100%}}',
 
             // Modal container (exact copy from game #modal-wrapper #modal-container)
-            '#piratestreaure-modal-wrapper #piratestreaure-modal-container{background-color:#fff;height:100vh;overflow:hidden;position:absolute;width:100%}',
+            '#piratestreasure-modal-wrapper #piratestreasure-modal-container{background-color:#fff;height:100vh;overflow:hidden;position:absolute;width:100%}',
 
             // Modal header (exact copy from game #modal-container .modal-header)
-            '#piratestreaure-modal-container .modal-header{align-items:center;background:#626b90;border-radius:0;color:#fff;display:flex;height:31px;justify-content:space-between;text-align:left;width:100%;border:0!important;padding:0 .5rem!important}',
+            '#piratestreasure-modal-container .modal-header{align-items:center;background:#626b90;border-radius:0;color:#fff;display:flex;height:31px;justify-content:space-between;text-align:left;width:100%;border:0!important;padding:0 .5rem!important}',
 
             // Header title (exact copy from game #modal-container .header-title)
-            '#piratestreaure-modal-container .header-title{font-weight:700;text-transform:uppercase;width:90%}',
+            '#piratestreasure-modal-container .header-title{font-weight:700;text-transform:uppercase;width:90%}',
 
             // Header icon (exact copy from game #modal-container .header-icon)
-            '#piratestreaure-modal-container .header-icon{cursor:pointer;height:1.2rem;margin:0 .5rem}',
-            '#piratestreaure-modal-container .header-icon.closeModal{height:19px;width:19px}',
+            '#piratestreasure-modal-container .header-icon{cursor:pointer;height:1.2rem;margin:0 .5rem}',
+            '#piratestreasure-modal-container .header-icon.closeModal{height:19px;width:19px}',
 
             // Modal content (exact copy from game #modal-container #modal-content)
-            '#piratestreaure-modal-container #piratestreaure-modal-content{height:calc(100% - 31px);max-width:inherit;overflow:hidden;display:flex;flex-direction:column}',
+            '#piratestreasure-modal-container #piratestreasure-modal-content{height:calc(100% - 31px);max-width:inherit;overflow:hidden;display:flex;flex-direction:column}',
 
             // Central container (exact copy from game #modal-container #central-container) - with padding
-            '#piratestreaure-modal-container #piratestreaure-central-container{background-color:#e9effd;margin:0;overflow-x:hidden;overflow-y:auto;width:100%;flex:1;padding:10px 15px}',
+            '#piratestreasure-modal-container #piratestreasure-central-container{background-color:#e9effd;margin:0;overflow-x:hidden;overflow-y:auto;width:100%;flex:1;padding:10px 15px}',
 
             // Hide class
-            '#piratestreaure-modal-wrapper.hide{pointer-events:none}',
+            '#piratestreasure-modal-wrapper.hide{pointer-events:none}',
 
             // Spin animation for loading
             '@keyframes spin{to{transform:rotate(360deg)}}'
@@ -558,7 +558,7 @@
 
         injectModalStyles();
 
-        var existing = document.getElementById('piratestreaure-modal-wrapper');
+        var existing = document.getElementById('piratestreasure-modal-wrapper');
         if (existing) {
             // Check if content still exists
             var contentCheck = existing.querySelector('#alliance-search-wrapper');
@@ -582,17 +582,17 @@
         // Structure: #modal-wrapper > #modal-background + #modal-content-wrapper > #modal-container > .modal-header + #modal-content > #central-container
 
         var modalWrapper = document.createElement('div');
-        modalWrapper.id = 'piratestreaure-modal-wrapper';
+        modalWrapper.id = 'piratestreasure-modal-wrapper';
 
         var modalBackground = document.createElement('div');
-        modalBackground.id = 'piratestreaure-modal-background';
+        modalBackground.id = 'piratestreasure-modal-background';
         modalBackground.onclick = function() { closeAllianceSearchModal(); };
 
         var modalContentWrapper = document.createElement('div');
-        modalContentWrapper.id = 'piratestreaure-modal-content-wrapper';
+        modalContentWrapper.id = 'piratestreasure-modal-content-wrapper';
 
         var modalContainer = document.createElement('div');
-        modalContainer.id = 'piratestreaure-modal-container';
+        modalContainer.id = 'piratestreasure-modal-container';
         modalContainer.className = 'font-lato';
         // Inline styles for positioning (same as game applies dynamically)
         modalContainer.style.top = headerHeight + 'px';
@@ -625,10 +625,10 @@
 
         // Modal content (exact structure as game)
         var modalContent = document.createElement('div');
-        modalContent.id = 'piratestreaure-modal-content';
+        modalContent.id = 'piratestreasure-modal-content';
 
         var centralContainer = document.createElement('div');
-        centralContainer.id = 'piratestreaure-central-container';
+        centralContainer.id = 'piratestreasure-central-container';
 
         var content = buildSearchContent();
         centralContainer.appendChild(content);
@@ -648,7 +648,7 @@
     function buildSearchContent() {
         var wrapper = document.createElement('div');
         wrapper.id = 'alliance-search-wrapper';
-        wrapper.dataset.piratestreaureModal = 'alliance-search';
+        wrapper.dataset.piratestreasureModal = 'alliance-search';
         wrapper.style.cssText = 'display:flex;flex-direction:column;height:100%;min-height:0;';
 
         var indexingContainer = document.createElement('div');

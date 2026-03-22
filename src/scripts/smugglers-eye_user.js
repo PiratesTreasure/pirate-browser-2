@@ -25,7 +25,7 @@
     var STORE_NAME = 'data';
     var CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
     var AUTOPRICE_CACHE_TTL = 60 * 60 * 1000; // 1 hour
-    var API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
     var MAX_BUFFER_SIZE = 100;
     var MAX_BUFFER_AGE = 24 * 60 * 60 * 1000; // 24 hours
     var originalFetch = window.fetch;
@@ -92,8 +92,8 @@
 
     async function getSharedCategory(category, retryCount) {
         // Use DepartManager's in-memory cache if available (eliminates race conditions)
-        if (window._piratestreaureDMStorage && window._piratestreaureDMStorage.isReady()) {
-            return window._piratestreaureDMStorage.getCategory(category);
+        if (window._piratestreasureDMStorage && window._piratestreasureDMStorage.isReady()) {
+            return window._piratestreasureDMStorage.getCategory(category);
         }
         // Fallback: direct DB read (DepartManager not loaded yet)
         retryCount = retryCount || 0;
@@ -122,8 +122,8 @@
 
     async function saveSharedCategory(category, data, retryCount) {
         // Use DepartManager's debounced save if available (eliminates race conditions)
-        if (window._piratestreaureDMStorage && window._piratestreaureDMStorage.isReady()) {
-            window._piratestreaureDMStorage.saveCategory(category, data);
+        if (window._piratestreasureDMStorage && window._piratestreasureDMStorage.isReady()) {
+            window._piratestreasureDMStorage.saveCategory(category, data);
             return true;
         }
         // Fallback: direct DB write (DepartManager not loaded yet)
@@ -180,8 +180,8 @@
         try {
             var parsed = null;
             // Use DM's in-memory cache if available
-            if (window._piratestreaureDMStorage && window._piratestreaureDMStorage.isReady()) {
-                parsed = window._piratestreaureDMStorage.getAutoPriceCache();
+            if (window._piratestreasureDMStorage && window._piratestreasureDMStorage.isReady()) {
+                parsed = window._piratestreasureDMStorage.getAutoPriceCache();
             } else {
                 var result = await window.PiratesTreasureBridge.storage.get('DepartManager', 'data', 'autoPriceCache');
                 if (result) parsed = JSON.parse(result);
@@ -214,8 +214,8 @@
     async function saveAutoPriceCache() {
         try {
             // Use DM's API if available (writes through DM's cache)
-            if (window._piratestreaureDMStorage) {
-                window._piratestreaureDMStorage.saveAutoPriceCache(autoPriceCacheData);
+            if (window._piratestreasureDMStorage) {
+                window._piratestreasureDMStorage.saveAutoPriceCache(autoPriceCacheData);
             } else {
                 await window.PiratesTreasureBridge.storage.set('DepartManager', 'data', 'autoPriceCache', JSON.stringify(autoPriceCacheData));
             }
@@ -845,7 +845,7 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isModalOpen) {
                 log('PiratesTreasure menu clicked, closing modal');
                 closeModal();
@@ -1122,8 +1122,8 @@
     }
 
     // Expose for Android BackgroundScriptService
-    if (!window.piratestreaureRunSmugglersEye) {
-        window.piratestreaureRunSmugglersEye = function() {
+    if (!window.piratestreasureRunSmugglersEye) {
+        window.piratestreasureRunSmugglersEye = function() {
             return loadSettings().then(function() {
                 if (!settings.enabled) {
                     return { skipped: true, reason: 'disabled' };
@@ -1133,7 +1133,7 @@
         };
     }
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -1142,11 +1142,11 @@
     }
 
     // Register for background job system
-    if (!window.piratestreaureBackgroundJobs) {
-        window.piratestreaureBackgroundJobs = [];
+    if (!window.piratestreasureBackgroundJobs) {
+        window.piratestreasureBackgroundJobs = [];
     }
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs.push({
         name: 'SmugglersEye',
-        run: function() { return window.piratestreaureRunSmugglersEye(); }
+        run: function() { return window.piratestreasureRunSmugglersEye(); }
     });
 })();

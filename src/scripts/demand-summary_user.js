@@ -24,7 +24,7 @@
     const RANKING_BATCH_SIZE = 5; // Ports per batch
     const RANKING_RETRY_BATCH_SIZE = 3; // Reduced batch size for retries
     const RANKING_BATCH_DELAY_MS = 2000; // Delay between batches
-    const API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
 
     // ========== REBELSHIPBRIDGE STORAGE ==========
     var RETRY_DELAYS = [500, 1000, 2000, 4000];
@@ -808,7 +808,7 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isDemandModalOpen) {
                 log('PiratesTreasure menu clicked, closing modal');
                 closeDemandModal();
@@ -1199,7 +1199,7 @@
         const cooldownRemaining = getTimeUntilNextCollect();
         const vesselsByDest = getVesselsByDestinationWithFallback();
 
-        let html = '<div id="demand-summary-wrapper" data-piratestreaure-modal="demand-summary" style="padding:8px 2px;font-family:Lato,sans-serif;color:#01125d;height:100%;display:flex;flex-direction:column;box-sizing:border-box;">';
+        let html = '<div id="demand-summary-wrapper" data-piratestreasure-modal="demand-summary" style="padding:8px 2px;font-family:Lato,sans-serif;color:#01125d;height:100%;display:flex;flex-direction:column;box-sizing:border-box;">';
 
         // Header with last collect times
         const rankings = loadRankingCacheSync();

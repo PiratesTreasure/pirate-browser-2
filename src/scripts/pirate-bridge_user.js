@@ -45,12 +45,18 @@
     window.dispatchEvent(new CustomEvent('pirate:menu-updated'));
   };
 
-  // ── Modal registry ────────────────────────────────────────────
+  // ── Modal registry (supports multiple concurrent modals) ─────
   window.PiratesTreasureModalRegistry = window.PiratesTreasureModalRegistry || {
-    _open: null,
-    register:   function (n) { this._open = n; },
-    unregister: function (n) { if (this._open === n) this._open = null; },
-    isOpen:     function (n) { return this._open === n; },
+    openModals: new Set(),
+    register:   function (n) { this.openModals.add(n); },
+    unregister: function (n) { this.openModals.delete(n); },
+    isOpen:     function (n) { return this.openModals.has(n); },
+    hasAnyOpen: function ()  { return this.openModals.size > 0; },
+    closeAll:   function ()  {
+      this.openModals.forEach(function (name) {
+        window.dispatchEvent(new CustomEvent('piratestreasure-close-modal', { detail: { name: name } }));
+      });
+    }
   };
 
   // ── Notifications ─────────────────────────────────────────────
@@ -65,6 +71,73 @@
   };
   window.sendSystemNotification = (t, m) => window.PiratesTreasureNotify.show(t, m);
 
-  console.log('[PirateBridge] v1.2 Ready ✓');
+  // ── Error logger ────────────────────────────────────────────
+  window.PirateLog = window.PirateLog || {
+    warn: function (source, msg, err) {
+      console.warn('[' + source + ']', msg, err || '');
+    },
+    error: function (source, msg, err) {
+      console.error('[' + source + ']', msg, err || '');
+    }
+  };
+
+  // ── API base URL ────────────────────────────────────────────
+  window.PIRATE_API_BASE = 'https://shippingmanager.cc/api';
+
+  // ── Shared utilities ─────────────────────────────────────────
+  window.PirateUtils = window.PirateUtils || {
+    formatNumberWithSeparator: function (value) {
+      var num = Number(String(value).replace(/,/g, ''));
+      if (isNaN(num)) return String(value);
+      return new Intl.NumberFormat('en-US', { useGrouping: true, maximumFractionDigits: 0 }).format(num);
+    },
+    formatNumber: function (num) {
+      if (num == null || isNaN(num)) return '0';
+      return new Intl.NumberFormat('en-US').format(num);
+    },
+    setupThousandSeparator: function (input) {
+      if (!input) return;
+      input.type = 'text';
+      input.inputMode = 'numeric';
+      input.addEventListener('input', function (e) {
+        var raw = e.target.value.replace(/[^\d]/g, '');
+        e.target.value = window.PirateUtils.formatNumberWithSeparator(raw);
+      });
+      if (input.value) {
+        input.value = window.PirateUtils.formatNumberWithSeparator(input.value);
+      }
+    },
+    getNumericValue: function (input) {
+      return parseInt(String(input.value).replace(/,/g, ''), 10);
+    },
+    getPinia: function () {
+      var appEl = document.querySelector('#app');
+      if (!appEl || !appEl.__vue_app__) return null;
+      var app = appEl.__vue_app__;
+      return app._context.provides.pinia || app.config.globalProperties.$pinia;
+    },
+    getStore: function (name) {
+      var pinia = window.PirateUtils.getPinia();
+      if (!pinia || !pinia._s) return null;
+      return pinia._s.get(name);
+    }
+  };
+
+  // ── Script lifecycle cleanup ─────────────────────────────────
+  // Scripts register cleanup handlers; all are called on page unload
+  window.PirateCleanup = window.PirateCleanup || {
+    _handlers: [],
+    register: function (name, fn) { this._handlers.push({ name: name, fn: fn }); },
+    runAll: function () {
+      for (var i = 0; i < this._handlers.length; i++) {
+        try { this._handlers[i].fn(); } catch (e) {
+          console.warn('[PirateCleanup] Error in ' + this._handlers[i].name + ':', e);
+        }
+      }
+    }
+  };
+  window.addEventListener('beforeunload', function () { window.PirateCleanup.runAll(); });
+
+  console.log('[PirateBridge] v1.3 Ready ✓');
 
 })();

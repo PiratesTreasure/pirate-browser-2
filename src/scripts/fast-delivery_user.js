@@ -18,7 +18,7 @@
     // ============================================
     // CONSTANTS
     // ============================================
-    var API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
     var DEBOUNCE_MS = 200;
     var RETRY_BASE_DELAY_MS = 1000;
     var MAX_RETRIES = 3;

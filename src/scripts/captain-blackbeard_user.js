@@ -646,7 +646,7 @@
     function setupModalWatcher() {
         if (modalListenerAttached) return;
         modalListenerAttached = true;
-        window.addEventListener('piratestreaure-menu-click', handleMenuClick);
+        window.addEventListener('piratestreasure-menu-click', handleMenuClick);
     }
 
     function openSettingsModal() {
@@ -868,7 +868,7 @@
     }
 
     // Expose for Android BackgroundScriptService
-    window.piratestreaureRunCaptainBlackbeard = function() {
+    window.piratestreasureRunCaptainBlackbeard = function() {
         return loadSettings().then(function() {
             if (!settings.enabled) {
                 return { skipped: true, reason: 'disabled' };
@@ -877,7 +877,7 @@
         });
     };
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -886,9 +886,9 @@
     }
 
     // Register for background job system
-    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
+    window.piratestreasureBackgroundJobs.push({
         name: 'CaptainBlackbeard',
-        run: function() { return window.piratestreaureRunCaptainBlackbeard(); }
+        run: function() { return window.piratestreasureRunCaptainBlackbeard(); }
     });
 })();

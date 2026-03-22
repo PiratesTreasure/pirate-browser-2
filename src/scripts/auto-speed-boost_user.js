@@ -22,7 +22,7 @@
     var STORE_NAME = 'data';
     var LOG_PREFIX = '[AutoSpeedBoost]';
     var CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
-    var API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
     var SPEED_SKU = 'speed_up';
     var SPEED_COST = 1200;
 
@@ -461,7 +461,7 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isModalOpen) {
                 console.log(LOG_PREFIX, 'PiratesTreasure menu clicked, closing modal');
                 closeModal();
@@ -708,7 +708,7 @@
     }
 
     // Expose for Android BackgroundScriptService
-    window.piratestreaureRunAutoSpeedBoost = async function() {
+    window.piratestreasureRunAutoSpeedBoost = async function() {
         await loadSettingsAsync();
         var settings = loadSettings();
         if (!settings.enabled) {
@@ -717,7 +717,7 @@
         return await checkAndBuy();
     };
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -726,9 +726,9 @@
     }
 
     // Register for background job system
-    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
+    window.piratestreasureBackgroundJobs.push({
         name: 'AutoSpeedBoost',
-        run: async function() { return await window.piratestreaureRunAutoSpeedBoost(); }
+        run: async function() { return await window.piratestreasureRunAutoSpeedBoost(); }
     });
 })();

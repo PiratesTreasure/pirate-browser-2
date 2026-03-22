@@ -151,7 +151,7 @@
 
     // Export all messages
     function exportMessages(format) {
-        var dropdown = document.getElementById('piratestreaure-dropdown');
+        var dropdown = document.getElementById('piratestreasure-dropdown');
         if (dropdown) dropdown.style.display = 'none';
 
         var existing = document.getElementById('export-progress');
@@ -247,7 +247,7 @@
 
     // Export alliance chat
     function exportAllianceChat(format) {
-        var dropdown = document.getElementById('piratestreaure-dropdown');
+        var dropdown = document.getElementById('piratestreasure-dropdown');
         if (dropdown) dropdown.style.display = 'none';
 
         var existing = document.getElementById('export-progress');

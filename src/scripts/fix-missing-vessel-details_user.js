@@ -130,7 +130,7 @@
         if (apiCache[name]) return apiCache[name];
 
         // Acquirable vessels (shop - set by PiratesTreasure browser)
-        var allVessels = window._piratestreaureAllVessels;
+        var allVessels = window._piratestreasureAllVessels;
         if (Array.isArray(allVessels)) {
             for (var i = 0; i < allVessels.length; i++) {
                 if (allVessels[i].name === name) return allVessels[i];

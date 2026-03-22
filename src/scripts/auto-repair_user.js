@@ -494,7 +494,7 @@
         if (modalListenerAttached) return;
         modalListenerAttached = true;
 
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isRepairModalOpen) {
                 log('PiratesTreasure menu clicked, closing modal');
                 closeRepairModal();
@@ -872,7 +872,7 @@
     }
 
     // Expose for Android BackgroundScriptService
-    window.piratestreaureRunYardForeman = function() {
+    window.piratestreasureRunYardForeman = function() {
         return loadSettings().then(function() {
             if (!settings.enabled) {
                 return { skipped: true, reason: 'disabled' };
@@ -881,7 +881,7 @@
         });
     };
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -890,9 +890,9 @@
     }
 
     // Register for background job system
-    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
+    window.piratestreasureBackgroundJobs.push({
         name: 'YardForeman',
-        run: function() { return window.piratestreaureRunYardForeman(); }
+        run: function() { return window.piratestreasureRunYardForeman(); }
     });
 })();

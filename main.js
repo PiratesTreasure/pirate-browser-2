@@ -258,6 +258,22 @@ ipcMain.on('accounts:setup-partition', (_e, { partition }) => {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
     'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
   );
+  // Add Content Security Policy for webview sessions
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self' https://shippingmanager.cc https://*.shippingmanager.cc; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://shippingmanager.cc https://*.shippingmanager.cc; " +
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+          "font-src 'self' https://fonts.gstatic.com; " +
+          "img-src 'self' data: https: blob:; " +
+          "connect-src 'self' https://shippingmanager.cc https://*.shippingmanager.cc wss://*.shippingmanager.cc;"
+        ]
+      }
+    });
+  });
 });
 
 // ── Open external links in system browser ────────────────────

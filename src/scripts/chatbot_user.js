@@ -851,7 +851,7 @@
     function setupModalWatcher() {
         if (modalListenerAttached) return;
         modalListenerAttached = true;
-        window.addEventListener('piratestreaure-menu-click', function() {
+        window.addEventListener('piratestreasure-menu-click', function() {
             if (isModalOpen) closeModal();
         });
     }
@@ -1450,10 +1450,10 @@
 
     // Background job for Android BackgroundScriptService
     function registerBackgroundJob() {
-        window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
+        window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
 
         // Check if already registered
-        var alreadyRegistered = window.piratestreaureBackgroundJobs.some(function(job) {
+        var alreadyRegistered = window.piratestreasureBackgroundJobs.some(function(job) {
             return job.name === 'ChatBot';
         });
         if (alreadyRegistered) {
@@ -1461,7 +1461,7 @@
             return;
         }
 
-        window.piratestreaureBackgroundJobs.push({
+        window.piratestreasureBackgroundJobs.push({
             name: 'ChatBot',
             run: async function() {
                 if (!enabled) {
@@ -1507,7 +1507,7 @@
         log('ChatBot initialized');
     }
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {

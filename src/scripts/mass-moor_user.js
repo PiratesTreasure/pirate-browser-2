@@ -15,7 +15,7 @@
 (function() {
     'use strict';
 
-    var API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
     var DEBOUNCE_MS = 300;
 
     function log(msg, level) {

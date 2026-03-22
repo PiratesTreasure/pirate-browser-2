@@ -311,7 +311,7 @@
     }
 
     // Listen for header resize event to reinitialize
-    window.addEventListener('piratestreaure-header-resize', function() {
+    window.addEventListener('piratestreasure-header-resize', function() {
         resetElements();
         debounceResize(function() {
             if (insertPriceDisplays()) {

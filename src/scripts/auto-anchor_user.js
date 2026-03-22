@@ -42,7 +42,7 @@
     var processedSliderInputs = new WeakSet();
     var sliderFixTimeout = null;
     var modalEventListeners = [];
-    var piratestreaureMenuClickHandler = null;
+    var piratestreasureMenuClickHandler = null;
 
     // ========== THOUSAND SEPARATOR UTILITIES ==========
     function formatNumberWithSeparator(value) {
@@ -626,16 +626,16 @@
 
     function setupModalWatcher() {
         // Store listener function, removeEventListener before addEventListener to prevent duplicates
-        if (!piratestreaureMenuClickHandler) {
-            piratestreaureMenuClickHandler = function() {
+        if (!piratestreasureMenuClickHandler) {
+            piratestreasureMenuClickHandler = function() {
                 if (isModalOpen) {
                     closeModal();
                 }
             };
         } else {
-            window.removeEventListener('piratestreaure-menu-click', piratestreaureMenuClickHandler);
+            window.removeEventListener('piratestreasure-menu-click', piratestreasureMenuClickHandler);
         }
-        window.addEventListener('piratestreaure-menu-click', piratestreaureMenuClickHandler);
+        window.addEventListener('piratestreasure-menu-click', piratestreasureMenuClickHandler);
     }
 
     function openSettingsModal() {
@@ -934,7 +934,7 @@
         initBridge();
     }
 
-    window.piratestreaureRunAutoAnchor = function() {
+    window.piratestreasureRunAutoAnchor = function() {
         return loadSettings().then(function() {
             if (!settings.enabled) {
                 return { skipped: true, reason: 'disabled' };
@@ -943,13 +943,13 @@
         });
     };
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         init();
     }
 
-    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
+    window.piratestreasureBackgroundJobs.push({
         name: 'AutoAnchor',
-        run: function() { return window.piratestreaureRunAutoAnchor(); }
+        run: function() { return window.piratestreasureRunAutoAnchor(); }
     });
 })();

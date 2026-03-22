@@ -23,7 +23,7 @@
     var LOG_PREFIX = '[AutoHappyStaffByPoints]';
 
     var CHECK_INTERVAL = 15 * 60 * 1000;
-    var API_BASE = 'https://shippingmanager.cc/api';
+    var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
     var WORKSHOP_SKU = 'employee_workshop';
     var WORKSHOP_COST = 300;
 
@@ -752,7 +752,7 @@
             }
         };
 
-        window.addEventListener('piratestreaure-menu-click', menuClickListener);
+        window.addEventListener('piratestreasure-menu-click', menuClickListener);
     }
 
     function openSettingsModal() {
@@ -1055,12 +1055,12 @@
         removeModalStyles();
 
         if (menuClickListener) {
-            window.removeEventListener('piratestreaure-menu-click', menuClickListener);
+            window.removeEventListener('piratestreasure-menu-click', menuClickListener);
             menuClickListener = null;
         }
 
         if (headerResizeListener) {
-            window.removeEventListener('piratestreaure-header-resize', headerResizeListener);
+            window.removeEventListener('piratestreasure-header-resize', headerResizeListener);
             headerResizeListener = null;
         }
 
@@ -1077,7 +1077,7 @@
     }
 
     // Expose for Android BackgroundScriptService
-    window.piratestreaureRunAutoHappyStaffByPoints = async function() {
+    window.piratestreasureRunAutoHappyStaffByPoints = async function() {
         var settings = loadSettings();
         if (!settings.enabled) {
             return { skipped: true, reason: 'disabled' };
@@ -1087,7 +1087,7 @@
     };
 
     // Expose cleanup for manual cleanup
-    window.piratestreaureCleanupAutoHappyStaffByPoints = cleanup;
+    window.piratestreasureCleanupAutoHappyStaffByPoints = cleanup;
 
     // Listen for header resize event to reinitialize display
     headerResizeListener = function() {
@@ -1104,9 +1104,9 @@
         }, 300);
     };
 
-    window.addEventListener('piratestreaure-header-resize', headerResizeListener);
+    window.addEventListener('piratestreasure-header-resize', headerResizeListener);
 
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -1115,9 +1115,9 @@
     }
 
     // Register for background job system
-    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
+    window.piratestreasureBackgroundJobs.push({
         name: 'AutoHappyStaffByPoints',
-        run: async function() { return await window.piratestreaureRunAutoHappyStaffByPoints(); }
+        run: async function() { return await window.piratestreasureRunAutoHappyStaffByPoints(); }
     });
 })();

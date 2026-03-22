@@ -550,7 +550,7 @@
                 var wasUnread = hasUnread;
                 if (checkNewest > lastReadTimestamp) {
                     hasUnread = true;
-                    if (!wasUnread && !window.__piratestreaureHeadless) {
+                    if (!wasUnread && !window.__piratestreasureHeadless) {
                         log('Unread messages detected! Newest: ' + checkNewest + ' Last read: ' + lastReadTimestamp);
                         // Send notifications only on state change (first detection) and only in foreground
                         var notifyMsg = unreadCount + ' new alliance chat message' + (unreadCount > 1 ? 's' : '') + ' (latest from ' + newestSender + ')';
@@ -717,7 +717,7 @@
     });
 
     // ========== BACKGROUND JOB ==========
-    window.piratestreaureRunAllianceChatNotify = function() {
+    window.piratestreasureRunAllianceChatNotify = function() {
         return loadSettings().then(function() {
             return loadLastRead();
         }).then(function() {
@@ -729,15 +729,15 @@
         });
     };
 
-    window.piratestreaureBackgroundJobs = window.piratestreaureBackgroundJobs || [];
-    window.piratestreaureBackgroundJobs.push({
+    window.piratestreasureBackgroundJobs = window.piratestreasureBackgroundJobs || [];
+    window.piratestreasureBackgroundJobs.push({
         name: 'AllianceChatNotify',
         interval: 60 * 1000,
-        run: function() { return window.piratestreaureRunAllianceChatNotify(); }
+        run: function() { return window.piratestreasureRunAllianceChatNotify(); }
     });
 
     // Wait for page to load
-    if (!window.__piratestreaureHeadless) {
+    if (!window.__piratestreasureHeadless) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function() { setTimeout(init, 500); });
         } else {
