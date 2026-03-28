@@ -2,7 +2,7 @@
 // @name         ShippingManager - Port Updates
 // @namespace    http://tampermonkey.net/
 // @description  !ports chatbot command with daily auto-post of alliance port rankings
-// @version      1.0
+// @version      1.1
 // @order        24
 // @author       PiratesTreasure
 // @match        https://shippingmanager.cc/*
@@ -23,7 +23,7 @@
     var LOG_PREFIX = '[PortUpdates]';
 
     var DEFAULT_SETTINGS = {
-        enabled: false,
+        enabled: true,
         autoPostEnabled: false,
         rankThreshold: 10
     };
@@ -122,7 +122,9 @@
         return '';
     }
 
-    function formatPortUpdateMessage(rankingData, threshold) {
+    var MAX_MSG_LENGTH = 900; // stay under chatbot's 1000 limit with margin
+
+    function formatPortUpdateMessages(rankingData, threshold) {
         if (!rankingData || !rankingData.ports || !rankingData.ports.length) return null;
 
         var allPorts = rankingData.ports;
@@ -171,84 +173,100 @@
         var midTablePorts = entries.filter(function(e) { return e.rank >= 6 && e.rank <= 7; });
         var top10Ports = entries.filter(function(e) { return e.rank >= 8 && e.rank <= 10; });
 
-        var lines = [];
+        // Build sections as separate blocks that can be split across messages
+        var sections = [];
 
-        // Header
-        lines.push('\u2693 Daily Port Update \u2693');
-        lines.push('');
-
-        // Overview
-        lines.push('\uD83D\uDCCA Current Overview');
-        lines.push(allPorts.length + ' ports tracked');
-        lines.push('\uD83E\uDD47 ' + rank1Count + ' Rank 1 ports');
-        lines.push('\uD83C\uDFC5 ' + top3Count + ' Top 3 ports');
-        lines.push('\uD83D\uDD1F ' + top10Count + ' Top 10 ports');
-        if (improved > 0 || dropped > 0) {
-            if (improved > 0) lines.push('\uD83D\uDCC8 ' + improved + ' improved \u2B06\uFE0F');
-            if (dropped > 0) lines.push('\uD83D\uDCC9 ' + dropped + ' dropped \u2B07\uFE0F');
-        }
+        // Header + Overview (always first)
+        var header = [];
+        header.push('\u2693 Daily Port Update \u2693');
+        header.push('');
+        header.push('\uD83D\uDCCA Current Overview');
+        header.push(allPorts.length + ' ports tracked');
+        header.push('\uD83E\uDD47 ' + rank1Count + ' Rank 1 ports');
+        header.push('\uD83C\uDFC5 ' + top3Count + ' Top 3 ports');
+        header.push('\uD83D\uDD1F ' + top10Count + ' Top 10 ports');
+        if (improved > 0) header.push('\uD83D\uDCC8 ' + improved + ' improved \u2B06\uFE0F');
+        if (dropped > 0) header.push('\uD83D\uDCC9 ' + dropped + ' dropped \u2B07\uFE0F');
+        sections.push(header.join('\n'));
 
         // Rank 1
         if (rank1Ports.length > 0) {
-            lines.push('');
-            lines.push('\uD83C\uDFC6 Rank 1 Ports');
+            var lines = ['\uD83C\uDFC6 Rank 1 Ports'];
             for (var r1 = 0; r1 < rank1Ports.length; r1++) {
                 var p1 = rank1Ports[r1];
                 lines.push(p1.name + getMovementStr(p1.rankChange));
             }
+            sections.push(lines.join('\n'));
         }
 
         // Rank 2
         if (rank2Ports.length > 0) {
-            lines.push('');
-            lines.push('\uD83E\uDD48 Rank 2 Ports');
+            var lines2 = ['\uD83E\uDD48 Rank 2 Ports'];
             for (var r2 = 0; r2 < rank2Ports.length; r2++) {
                 var p2 = rank2Ports[r2];
-                lines.push(p2.name + getMovementStr(p2.rankChange));
+                lines2.push(p2.name + getMovementStr(p2.rankChange));
             }
+            sections.push(lines2.join('\n'));
         }
 
         // Rank 3
         if (rank3Ports.length > 0) {
-            lines.push('');
-            lines.push('\uD83E\uDD49 Rank 3 Ports');
+            var lines3 = ['\uD83E\uDD49 Rank 3 Ports'];
             for (var r3 = 0; r3 < rank3Ports.length; r3++) {
                 var p3 = rank3Ports[r3];
-                lines.push(p3.name + getMovementStr(p3.rankChange));
+                lines3.push(p3.name + getMovementStr(p3.rankChange));
             }
+            sections.push(lines3.join('\n'));
         }
 
         // Chasing the Top (4-5)
         if (chasingPorts.length > 0) {
-            lines.push('');
-            lines.push('\uD83D\uDCCD Chasing the Top');
+            var lines4 = ['\uD83D\uDCCD Chasing the Top'];
             for (var c = 0; c < chasingPorts.length; c++) {
                 var pc = chasingPorts[c];
-                lines.push(pc.rank + ' \u2014 ' + pc.name + getMovementStr(pc.rankChange));
+                lines4.push(pc.rank + ' \u2014 ' + pc.name + getMovementStr(pc.rankChange));
             }
+            sections.push(lines4.join('\n'));
         }
 
         // Mid Table (6-7)
         if (midTablePorts.length > 0) {
-            lines.push('');
-            lines.push('\uD83D\uDCCD Mid Table Movement');
+            var lines5 = ['\uD83D\uDCCD Mid Table Movement'];
             for (var m = 0; m < midTablePorts.length; m++) {
                 var pm = midTablePorts[m];
-                lines.push(pm.rank + ' \u2014 ' + pm.name + getMovementStr(pm.rankChange));
+                lines5.push(pm.rank + ' \u2014 ' + pm.name + getMovementStr(pm.rankChange));
             }
+            sections.push(lines5.join('\n'));
         }
 
         // Top 10 Battle (8-10)
         if (top10Ports.length > 0) {
-            lines.push('');
-            lines.push('\uD83D\uDCCD Top 10 Battle');
+            var lines6 = ['\uD83D\uDCCD Top 10 Battle'];
             for (var t = 0; t < top10Ports.length; t++) {
                 var pt = top10Ports[t];
-                lines.push(pt.rank + ' \u2014 ' + pt.name + getMovementStr(pt.rankChange));
+                lines6.push(pt.rank + ' \u2014 ' + pt.name + getMovementStr(pt.rankChange));
             }
+            sections.push(lines6.join('\n'));
         }
 
-        return lines.join('\n');
+        // Pack sections into messages that fit under the char limit
+        var messages = [];
+        var current = '';
+
+        for (var s = 0; s < sections.length; s++) {
+            var section = sections[s];
+            var separator = current ? '\n\n' : '';
+
+            if ((current + separator + section).length <= MAX_MSG_LENGTH) {
+                current += separator + section;
+            } else {
+                if (current) messages.push(current);
+                current = section;
+            }
+        }
+        if (current) messages.push(current);
+
+        return messages.length > 0 ? messages : null;
     }
 
     // ============================================
@@ -264,13 +282,15 @@
         }
 
         var threshold = settings.rankThreshold || 10;
-        var message = formatPortUpdateMessage(rankingData, threshold);
-        if (!message) {
+        var messages = formatPortUpdateMessages(rankingData, threshold);
+        if (!messages) {
             await sendResponse('No ports found where the alliance ranks in the top ' + threshold + '.', userId, isDm);
             return;
         }
 
-        await sendResponse(message, userId, isDm);
+        for (var i = 0; i < messages.length; i++) {
+            await sendResponse(messages[i], userId, isDm);
+        }
     }
 
     // ============================================
@@ -298,19 +318,25 @@
         }
 
         var threshold = settings.rankThreshold || 10;
-        var message = formatPortUpdateMessage(rankingData, threshold);
-        if (!message) {
+        var messages = formatPortUpdateMessages(rankingData, threshold);
+        if (!messages) {
             log('No qualifying ports for auto-post');
             return;
         }
 
         try {
-            var sent = await window.PiratesTreasureChatBot.sendAllianceMessage(message);
-            if (sent !== false) {
+            var allSent = true;
+            for (var i = 0; i < messages.length; i++) {
+                var sent = await window.PiratesTreasureChatBot.sendAllianceMessage(messages[i]);
+                if (sent === false) {
+                    log('Failed to send auto-post part ' + (i + 1), 'error');
+                    allSent = false;
+                    break;
+                }
+            }
+            if (allSent) {
                 await dbSet('lastPostedRankingTimestamp', rankingData.updated);
-                log('Auto-posted port update (new ranking timestamp: ' + rankingData.updated + ')');
-            } else {
-                log('Failed to send auto-post', 'error');
+                log('Auto-posted port update (' + messages.length + ' message(s), new ranking timestamp: ' + rankingData.updated + ')');
             }
         } catch (e) {
             log('Auto-post error: ' + e.message, 'error');

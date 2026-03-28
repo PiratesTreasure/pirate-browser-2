@@ -3218,37 +3218,8 @@
                 }
             }
 
-            // Post-depart: Final Fill if price <= basic threshold
-            if (departedCount > 0) {
-                invalidateBunkerCache();
-                bunker = await getCachedBunkerData();
-
-                if (bunker) {
-                    if (settings.fuelMode !== 'off' && prices.fuelPrice <= settings.fuelPriceThreshold) {
-                        var fuelToFill = bunker.maxFuel - bunker.fuel;
-                        if (fuelToFill > 0) {
-                            var fuelCost = fuelToFill * prices.fuelPrice;
-                            if (bunker.cash - fuelCost >= settings.fuelMinCash) {
-                                await purchaseFuelAPI(fuelToFill, prices.fuelPrice);
-                            }
-                        }
-                    }
-
-                    if (settings.co2Mode !== 'off' && prices.co2Price <= settings.co2PriceThreshold) {
-                        invalidateBunkerCache();
-                        bunker = await getCachedBunkerData();
-                        if (bunker) {
-                            var co2ToFill = bunker.maxCO2 - bunker.co2;
-                            if (co2ToFill > 0) {
-                                var co2Cost = co2ToFill * prices.co2Price;
-                                if (bunker.cash - co2Cost >= settings.co2MinCash) {
-                                    await purchaseCO2API(co2ToFill, prices.co2Price);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            // Post-depart fill removed — autoRebuyFuel/CO2 in periodicCheck handles refills
+            // This was causing double purchases (fill before depart + fill after depart)
 
             // Send notification for remaining batch
             if (batchCount > 0) {

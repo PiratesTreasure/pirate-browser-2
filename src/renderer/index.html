@@ -755,6 +755,14 @@ function createWebview(id) {
     webviewReady.set(id, true);
   });
 
+  // Forward webview console logs to main window console
+  wv.addEventListener('console-message', (e) => {
+    const prefix = '[wv:' + id + '] ';
+    if (e.level === 2) console.error(prefix + e.message);
+    else if (e.level === 1) console.warn(prefix + e.message);
+    else console.log(prefix + e.message);
+  });
+
   // Handle page load - inject scripts if enabled
   wv.addEventListener('did-finish-load', async () => {
     const url = wv.getURL();
@@ -1301,6 +1309,16 @@ function setupToolsListener() {
 }
 
 // ── Start ─────────────────────────────────────────────────────
+// F12 opens DevTools for the active webview (to see script console logs)
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'F12') {
+    if (activeId) {
+      const wv = webviews.get(activeId);
+      if (wv && wv.openDevTools) wv.openDevTools();
+    }
+  }
+});
+
 document.addEventListener('DOMContentLoaded', () => { init(); setTimeout(setupToolsListener, 3000); initUpdater(); });
 
 // ── Auto-updater UI ───────────────────────────────────────────
