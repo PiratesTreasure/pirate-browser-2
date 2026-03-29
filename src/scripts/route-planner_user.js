@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ShippingManager - Route Planner
 // @namespace    https://github.com/PiratesTreasure
-// @description  Plan optimal routes based on speed, demand sustainability, and profitability
+// @description  Plan optimal routes based on demand, travel time, and pirate risk
 // @version      1.0
 // @author       https://github.com/PiratesTreasure
 // @order        15
@@ -22,9 +22,12 @@
     var RETRY_DELAYS = [500, 1000, 2000, 4000];
     var SEA_ROUTE_MULTIPLIER = 1.3;
     var EARTH_RADIUS_NM = 3440.065;
-    // Game time compression: 1 real hour = 41.67 game hours (125/3)
-    // Calibrated from: 3418nm @ 30kn = 2h44m real time
-    var GAME_TIME_FACTOR = 125 / 3;
+    // Game time: travelHours = distance / speed / 48 + PORT_OVERHEAD
+    // Calibrated from game's Create Route screen:
+    //   Southampton→Boston:      3233nm @ 30kn = 02:36:22 real
+    //   Southampton→Providenija: 4942nm @ 30kn = 03:47:35 real
+    var GAME_TIME_FACTOR = 48;
+    var PORT_OVERHEAD_HOURS = 13 / 36; // ~21m 40s loading/port time per leg
 
     var DEFAULT_SETTINGS = {
         defaultSpeed: 30,
@@ -32,12 +35,13 @@
         fuelPrice: 500,
         co2Price: 10,
         showExcludedPorts: false,
-        weights: { profitability: 45, demandSustainability: 35, travelTime: 20 }
+        weights: { demandSustainability: 50, travelTime: 50 }
     };
 
     var settings = {};
     var isModalOpen = false;
     var stylesInjected = false;
+    var _toggleableChannelIds = []; // Populated from route store on init
 
     // ========== STORAGE ==========
 
@@ -110,6 +114,50 @@
         return getStore('vessel');
     }
 
+    // Build hijacking risk cache from all fleet vessel routes (same approach as RebelShip)
+    function getHijackingRiskCache() {
+        var cache = {};
+        var vesselStore = getVesselStore();
+        if (!vesselStore || !vesselStore.userVessels) return cache;
+
+        for (var i = 0; i < vesselStore.userVessels.length; i++) {
+            var v = vesselStore.userVessels[i];
+            if (!v.routes || !Array.isArray(v.routes)) continue;
+            for (var j = 0; j < v.routes.length; j++) {
+                var route = v.routes[j];
+                if (route.origin && route.destination && route.hijacking_risk !== undefined) {
+                    var key = route.origin + '<>' + route.destination;
+                    var revKey = route.destination + '<>' + route.origin;
+                    cache[key] = route.hijacking_risk;
+                    cache[revKey] = route.hijacking_risk;
+                }
+            }
+        }
+        return cache;
+    }
+
+    function getHijackingRisk(originPort, destPort) {
+        var cache = getHijackingRiskCache();
+        return cache[originPort + '<>' + destPort] || cache[destPort + '<>' + originPort] || 0;
+    }
+
+    function goToPortOnMap(lat, lon, portCode) {
+        try {
+            var mapStore = getStore('mapStore');
+            if (mapStore && mapStore.map) {
+                // Close the route planner modal first
+                closeModal();
+                // Pan to the port on the Leaflet map
+                mapStore.map.setView([lat, lon], 6, { animate: true });
+                log('Map navigated to ' + portCode + ' (' + lat + ', ' + lon + ')');
+            } else {
+                log('Map store not available');
+            }
+        } catch (e) {
+            log('goToPortOnMap error: ' + e.message);
+        }
+    }
+
     function getModalStore() {
         return getStore('modal');
     }
@@ -138,6 +186,11 @@
     var vesselPortsCache = {};
     var VESSEL_PORTS_CACHE_TTL = 5 * 60 * 1000; // 5 min
 
+    // Route distance cache: keyed by "vesselId:originPort" → { routes, timestamp }
+    var routeDistanceCache = {};
+    var ROUTE_DISTANCE_CACHE_TTL = 10 * 60 * 1000; // 10 min
+    var prefetchInProgress = {}; // track active prefetches to avoid duplicates
+
     async function fetchVesselPorts(vesselId) {
         var cached = vesselPortsCache[vesselId];
         if (cached && Date.now() - cached.timestamp < VESSEL_PORTS_CACHE_TTL) {
@@ -159,6 +212,7 @@
                 var ports = data.data.all.ports;
                 vesselPortsCache[vesselId] = { ports: ports, timestamp: Date.now() };
                 log('Fetched ' + ports.length + ' reachable ports from API for vessel ' + vesselId);
+                if (ports.length > 0) log('Port sample keys: ' + Object.keys(ports[0]).join(', ') + ' | sample: ' + JSON.stringify(ports[0]).substring(0, 300));
                 return ports;
             }
             log('fetchVesselPorts: unexpected response structure');
@@ -168,15 +222,89 @@
         return null;
     }
 
-    // Build distance map using vessel's available ports + origin coords
-    async function fetchRouteDistances(vesselId, originPortCode) {
+    // Fetch real game distance for a single route via get-routes-by-ports API
+    // Passes toggleable channel IDs so the API returns all route options (passage variants)
+    async function fetchGameRouteDistance(vesselId, originPort, destPort) {
+        try {
+            var reqBody = { user_vessel_id: vesselId, port1: originPort, port2: destPort };
+            if (_toggleableChannelIds.length > 0) {
+                reqBody.channels = _toggleableChannelIds;
+            }
+            var resp = await fetch(API_BASE + '/route/get-routes-by-ports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(reqBody)
+            });
+            if (!resp.ok) return null;
+            var data = await resp.json();
+            if (data && data.data) {
+                var routes = Array.isArray(data.data) ? data.data :
+                             data.data.routes ? data.data.routes :
+                             data.data.route ? [data.data.route] : [];
+                if (routes.length > 0) {
+                    // Log route count and pick shortest route (passages make routes shorter)
+                    if (!window._rpRouteKeysLogged) {
+                        window._rpRouteKeysLogged = true;
+                        if (routes.length > 1) {
+                            log('Route API returned ' + routes.length + ' route options — picking shortest');
+                        }
+                    }
+                    // Pick the shortest route (passage routes are shorter)
+                    var r0 = routes[0];
+                    for (var si = 1; si < routes.length; si++) {
+                        var d0 = r0.total_distance || r0.distance || Infinity;
+                        var di = routes[si].total_distance || routes[si].distance || Infinity;
+                        if (di < d0) r0 = routes[si];
+                    }
+                    // Capture for debugging
+                    if (!window._rpRouteDebug) {
+                        window._rpRouteDebug = JSON.stringify(r0).substring(0, 1000);
+                    }
+                    // Only show CANAL badge for paid toggleable channels (Suez, Panama, etc.)
+                    var usesPaidCanal = false;
+                    if (r0.channels_ids && r0.channel_cost > 0) {
+                        usesPaidCanal = true;
+                    }
+                    return {
+                        distance: r0.total_distance || r0.distance || r0.nm || null,
+                        usesCanal: usesPaidCanal,
+                        channelFee: r0.channel_cost || r0.channel_fee || r0.channel_payment || 0,
+                        routeId: r0.id || r0.route_id || null,
+                        hijackingRisk: r0.hijacking_risk || r0.piracy_risk || r0.risk || r0.pirate_risk || 0
+                    };
+                }
+            }
+        } catch (e) {
+            log('fetchGameRouteDistance error: ' + e.message);
+        }
+        return null;
+    }
+
+    // Build distance map: get reachable ports, then batch-fetch real distances
+    async function fetchRouteDistances(vesselId, originPortCode, statusCallback) {
+        // Check cache first
+        var cacheKey = vesselId + ':' + originPortCode;
+        var cached = routeDistanceCache[cacheKey];
+        if (cached && Date.now() - cached.timestamp < ROUTE_DISTANCE_CACHE_TTL) {
+            log('Route distances cache hit for ' + originPortCode + ' (' + Object.keys(cached.routes).length + ' ports)');
+            return cached.routes;
+        }
+
+        // If a prefetch is already running for this key, wait for it
+        if (prefetchInProgress[cacheKey]) {
+            log('Waiting for prefetch in progress: ' + cacheKey);
+            await prefetchInProgress[cacheKey];
+            cached = routeDistanceCache[cacheKey];
+            if (cached) return cached.routes;
+        }
         var ports = await fetchVesselPorts(vesselId);
         if (!ports || ports.length === 0) {
             log('No ports from API, will use Haversine fallback');
             return null;
         }
 
-        // Get origin coords from the ports list or demand cache
+        // Get origin coords for Haversine pre-filter
         var originLat = null, originLon = null;
         for (var i = 0; i < ports.length; i++) {
             if (ports[i].code === originPortCode || ports[i].port_code === originPortCode) {
@@ -185,8 +313,6 @@
                 break;
             }
         }
-
-        // If origin not in port list, try demand cache
         if (originLat === null) {
             var cache = await getDemandCache();
             if (cache && cache.ports) {
@@ -199,15 +325,13 @@
                 }
             }
         }
-
         if (originLat === null || originLon === null) {
             log('Could not find origin coords for ' + originPortCode);
             return null;
         }
 
-        // Build distance map — these use Haversine but the port list is
-        // filtered to reachable ports only (game enforces vessel range)
-        var routes = {};
+        // Build port list with Haversine estimates
+        var portList = [];
         for (var k = 0; k < ports.length; k++) {
             var p = ports[k];
             var code = p.code || p.port_code;
@@ -215,14 +339,91 @@
             var pLat = parseFloat(p.lat);
             var pLon = parseFloat(p.lon);
             if (isNaN(pLat) || isNaN(pLon)) continue;
-            routes[code] = {
-                distance: haversineDistance(originLat, originLon, pLat, pLon),
-                channelFee: 0,
-                usesCanal: false
-            };
+            portList.push({ code: code, haversine: haversineDistance(originLat, originLon, pLat, pLon) });
         }
-        log('Built distance map for ' + Object.keys(routes).length + ' reachable ports');
+
+        // Fetch real distances from game API in batches
+        var routes = {};
+        var BATCH_SIZE = 10;
+        var BATCH_DELAY = 50;
+        var totalPorts = portList.length;
+        log('Fetching real distances for ' + totalPorts + ' ports from ' + originPortCode + '...');
+
+        for (var b = 0; b < portList.length; b += BATCH_SIZE) {
+            var batch = portList.slice(b, b + BATCH_SIZE);
+            var results = await Promise.all(batch.map(function(item) {
+                return fetchGameRouteDistance(vesselId, originPortCode, item.code)
+                    .then(function(r) { return { code: item.code, data: r, haversine: item.haversine }; });
+            }));
+
+            for (var r = 0; r < results.length; r++) {
+                var res = results[r];
+                if (res.data && res.data.distance) {
+                    routes[res.code] = {
+                        distance: res.data.distance,
+                        usesCanal: res.data.usesCanal,
+                        channelFee: res.data.channelFee,
+                        routeId: res.data.routeId,
+                        hijackingRisk: res.data.hijackingRisk || 0
+                    };
+                } else {
+                    routes[res.code] = {
+                        distance: res.haversine,
+                        channelFee: 0,
+                        usesCanal: false,
+                        hijackingRisk: 0
+                    };
+                }
+            }
+
+            // Update status if callback provided
+            var fetched = Math.min(b + BATCH_SIZE, totalPorts);
+            if (statusCallback) statusCallback(fetched, totalPorts);
+
+            if (b + BATCH_SIZE < portList.length) {
+                await new Promise(function(resolve) { setTimeout(resolve, BATCH_DELAY); });
+            }
+        }
+
+        var gameCount = Object.values(routes).filter(function(r) { return r.routeId; }).length;
+        log('Built distance map for ' + Object.keys(routes).length + ' ports (' + gameCount + ' from game API)');
+
+        // Store in cache
+        routeDistanceCache[cacheKey] = { routes: routes, timestamp: Date.now() };
         return routes;
+    }
+
+    // Pre-fetch distances for all idle vessels in background
+    async function prefetchAllDistances() {
+        var idle = getIdleVessels();
+        if (idle.length === 0) return;
+
+        // Group by origin port to avoid duplicate fetches for same port
+        var byOrigin = {};
+        for (var i = 0; i < idle.length; i++) {
+            var v = idle[i];
+            var origin = v.current_port_code;
+            if (!origin) continue;
+            if (!byOrigin[origin]) byOrigin[origin] = v;
+        }
+
+        var origins = Object.keys(byOrigin);
+        log('Pre-fetching distances for ' + origins.length + ' unique origin ports (' + idle.length + ' idle vessels)');
+
+        for (var j = 0; j < origins.length; j++) {
+            var vessel = byOrigin[origins[j]];
+            var cacheKey = vessel.id + ':' + origins[j];
+
+            // Skip if already cached or in progress
+            if (routeDistanceCache[cacheKey] && Date.now() - routeDistanceCache[cacheKey].timestamp < ROUTE_DISTANCE_CACHE_TTL) continue;
+            if (prefetchInProgress[cacheKey]) continue;
+
+            prefetchInProgress[cacheKey] = fetchRouteDistances(vessel.id, origins[j]).then(function(key) {
+                return function() { delete prefetchInProgress[key]; };
+            }(cacheKey)).catch(function(key) {
+                return function() { delete prefetchInProgress[key]; };
+            }(cacheKey));
+        }
     }
 
     // ========== ROUTE CREATION & DEPARTURE ==========
@@ -245,7 +446,7 @@
         }
     }
 
-    async function createRouteAndDepart(vesselId, originPort, destPort, speed) {
+    async function createRouteAndDepart(vesselId, originPort, destPort, speed, hijackingRisk) {
         try {
             // Step 0: If vessel is parked/anchored, resume it first
             var vesselStore = getVesselStore();
@@ -261,17 +462,18 @@
                 }
             }
 
+            // Will determine guards after checking route data for hijacking risk
+            var guards = (hijackingRisk && hijackingRisk > 0) ? 10 : 0;
+
             // Step 1: Get route ID by searching routes between origin and destination
             _debugLog.push('Step 1: Fetching routes ' + originPort + ' → ' + destPort);
+            var departReqBody = { user_vessel_id: vesselId, port1: originPort, port2: destPort };
+            if (_toggleableChannelIds.length > 0) departReqBody.channels = _toggleableChannelIds;
             var routesResp = await fetch(API_BASE + '/route/get-routes-by-ports', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({
-                    user_vessel_id: vesselId,
-                    port1: originPort,
-                    port2: destPort
-                })
+                body: JSON.stringify(departReqBody)
             });
             if (!routesResp.ok) {
                 var routesErr = await routesResp.json().catch(function() { return {}; });
@@ -289,13 +491,43 @@
                              routesData.data.routes ? routesData.data.routes :
                              routesData.data.route ? [routesData.data.route] : [];
                 if (routes.length > 0) {
-                    routeId = routes[0].id || routes[0].route_id;
+                    // Pick shortest route (passage variants may be shorter)
+                    var bestRoute = routes[0];
+                    for (var bri = 1; bri < routes.length; bri++) {
+                        var bd = bestRoute.total_distance || bestRoute.distance || Infinity;
+                        var cd = routes[bri].total_distance || routes[bri].distance || Infinity;
+                        if (cd < bd) bestRoute = routes[bri];
+                    }
+                    routeId = bestRoute.id || bestRoute.route_id;
+                    _debugLog.push('Selected shortest route: ' + (bestRoute.total_distance || bestRoute.distance) + 'nm (of ' + routes.length + ' options)');
                 }
             }
 
             if (!routeId) {
                 _debugLog.push('No route_id found in response');
                 return { success: false, error: 'No route found between ' + originPort + ' and ' + destPort };
+            }
+
+            // Check for hijacking risk in route response (try multiple field names)
+            if (guards === 0 && bestRoute) {
+                var routeRisk = bestRoute.hijacking_risk || bestRoute.piracy_risk || bestRoute.risk || bestRoute.pirate_risk || 0;
+                if (routeRisk > 0) {
+                    guards = 10;
+                    _debugLog.push('Pirate risk from route API: ' + routeRisk + '% - guards set to 10');
+                }
+            }
+
+            // Also check vessel routes cache as fallback
+            if (guards === 0) {
+                var cachedRisk = getHijackingRisk(originPort, destPort);
+                if (cachedRisk > 0) {
+                    guards = 10;
+                    _debugLog.push('Pirate risk from fleet cache: ' + cachedRisk + '% - guards set to 10');
+                }
+            }
+
+            if (guards > 0) {
+                _debugLog.push('Guards: 10/10 (pirate risk detected)');
             }
             _debugLog.push('Got route_id: ' + routeId);
 
@@ -342,7 +574,7 @@
                             body: JSON.stringify({
                                 user_vessel_id: vesselId,
                                 speed: speed,
-                                guards: 0,
+                                guards: guards,
                                 prices: ap
                             })
                         });
@@ -365,7 +597,7 @@
                 body: JSON.stringify({
                     user_vessel_id: vesselId,
                     speed: speed,
-                    guards: 0,
+                    guards: guards,
                     history: 0
                 })
             });
@@ -613,8 +845,14 @@
         }
         if (distance <= 0) return null;
 
+        // Get hijacking risk: check fleet cache first, then API-fetched route data
+        var hijackingRisk = getHijackingRisk(vessel.current_port_code, port.code);
+        if (!hijackingRisk && apiRoutes && apiRoutes[port.code] && apiRoutes[port.code].hijackingRisk) {
+            hijackingRisk = apiRoutes[port.code].hijackingRisk;
+        }
+
         // Travel time in real hours (game compresses time by GAME_TIME_FACTOR)
-        var travelHours = distance / speed / GAME_TIME_FACTOR;
+        var travelHours = distance / speed / GAME_TIME_FACTOR + PORT_OVERHEAD_HOURS;
         var roundTripHours = travelHours * 2;
         var vesselCapacity = getVesselCapacity(vessel);
         var effectiveDemand = getEffectiveDemand(port, vessel.capacity_type, enRouteByPort);
@@ -630,10 +868,6 @@
 
         // Cap sustainable trips by what's physically possible
         var tripsToday = Math.min(sustainableTrips, possibleTrips);
-
-        // Profitability
-        var profitPerTrip = calculateProfit(vessel, distance, speed, settings.fuelPrice, settings.co2Price);
-        var dailyProfit = profitPerTrip * tripsToday;
 
         // Status
         var status = 'red';
@@ -666,18 +900,17 @@
             sustainableTrips: sustainableTrips,
             possibleTrips: possibleTrips,
             tripsToday: tripsToday,
-            profitPerTrip: profitPerTrip,
-            dailyProfit: dailyProfit,
             usesCanal: usesCanal,
             channelFee: channelFee,
+            hijackingRisk: hijackingRisk,
             status: status,
             score: 0 // calculated after normalization
         };
     }
 
-    async function rankPorts(vessel, ports, originLat, originLon, speed) {
+    async function rankPorts(vessel, ports, originLat, originLon, speed, statusCallback) {
         // Try to get real distances from game API (canal-aware)
-        var apiRoutes = await fetchRouteDistances(vessel.id, vessel.current_port_code);
+        var apiRoutes = await fetchRouteDistances(vessel.id, vessel.current_port_code, statusCallback);
         var enRouteByPort = getEnRouteByPort();
         var scored = [];
 
@@ -691,14 +924,6 @@
 
         if (scored.length === 0) return [];
 
-        // Find max values for normalization
-        var maxProfit = 0;
-        var maxTravelHours = 0;
-        for (var j = 0; j < scored.length; j++) {
-            if (scored[j].profitPerTrip > maxProfit) maxProfit = scored[j].profitPerTrip;
-            if (scored[j].travelHours > maxTravelHours) maxTravelHours = scored[j].travelHours;
-        }
-
         // Calculate composite scores
         var w = settings.weights;
         var idealHours = settings.idealTravelHours;
@@ -707,24 +932,19 @@
         for (var k = 0; k < scored.length; k++) {
             var s = scored[k];
 
-            // Profitability score (0-1)
-            var profitScore = maxProfit > 0 ? Math.max(0, s.profitPerTrip / maxProfit) : 0;
-
             // Demand sustainability score (0-1)
             var sustainScore = s.possibleTrips > 0 ? Math.min(1, s.sustainableTrips / s.possibleTrips) : 0;
 
-            // Travel time sweet spot — Gaussian centered on ideal
+            // Travel time sweet spot — Gaussian centered on ideal (e.g. 3h)
             var travelDiff = s.travelHours - idealHours;
             var travelScore = Math.exp(-(travelDiff * travelDiff) / (2 * sigma * sigma));
 
             // Composite score (0-100)
             s.score = Math.round(
-                (profitScore * w.profitability +
-                 sustainScore * w.demandSustainability +
+                (sustainScore * w.demandSustainability +
                  travelScore * w.travelTime)
             );
 
-            s._profitScore = profitScore;
             s._sustainScore = sustainScore;
             s._travelScore = travelScore;
         }
@@ -799,7 +1019,7 @@
                 var distance = haversineDistance(originLat, originLon, pLat, pLon);
                 if (distance <= 0) continue;
 
-                var travelHours = distance / speed / GAME_TIME_FACTOR;
+                var travelHours = distance / speed / GAME_TIME_FACTOR + PORT_OVERHEAD_HOURS;
                 var roundTripHours = travelHours * 2;
                 var hrsLeft = hoursUntilReset();
                 var effectiveHours = hrsLeft < roundTripHours ? 24 : hrsLeft;
@@ -807,21 +1027,16 @@
                 var sustainableTrips = vesselCap > 0 ? Math.floor(availDemand / vesselCap) : 0;
                 var tripsToday = Math.min(sustainableTrips, possibleTrips);
 
-                var profitPerTrip = calculateProfit(vessel, distance, speed, settings.fuelPrice, settings.co2Price);
-
-                // Score using same weights
+                // Score using same weights (demand + travel time)
                 var w = settings.weights;
                 var idealHours = settings.idealTravelHours;
                 var sigma = idealHours * 0.8;
 
-                var maxProfitEst = profitPerTrip; // rough normalization
-                var profitScore = profitPerTrip > 0 ? 1 : 0;
                 var sustainScore = possibleTrips > 0 ? Math.min(1, sustainableTrips / possibleTrips) : 0;
                 var travelDiff = travelHours - idealHours;
                 var travelScore = Math.exp(-(travelDiff * travelDiff) / (2 * sigma * sigma));
 
-                var score = profitPerTrip * w.profitability / 45 +
-                            sustainScore * w.demandSustainability +
+                var score = sustainScore * w.demandSustainability +
                             travelScore * w.travelTime;
 
                 if (score > bestScore) {
@@ -831,8 +1046,6 @@
                         portCode: port.code,
                         distance: Math.round(distance),
                         travelHours: travelHours,
-                        profitPerTrip: profitPerTrip,
-                        dailyProfit: profitPerTrip * tripsToday,
                         sustainableTrips: sustainableTrips,
                         tripsToday: tripsToday,
                         effectiveDemand: availDemand,
@@ -917,6 +1130,8 @@
 .rp-settings-row input[type="checkbox"] { accent-color:#1e6fbf; }\
 .rp-fleet-table td { vertical-align:middle; }\
 .rp-warn { background:#3d2a0a; color:#f39c12; padding:10px 14px; border-radius:6px; margin-bottom:12px; font-size:13px; }\
+.rp-goto-btn { background:none; border:none; cursor:pointer; font-size:13px; padding:0 3px; opacity:0.7; vertical-align:middle; }\
+.rp-goto-btn:hover { opacity:1; transform:scale(1.2); }\
 .rp-send-btn { background:#27ae60; color:#fff; border:none; border-radius:3px; padding:3px 10px; font-size:11px;\
   font-weight:600; cursor:pointer; white-space:nowrap; }\
 .rp-send-btn:hover { background:#2ecc71; }\
@@ -1019,6 +1234,9 @@
 
         isModalOpen = true;
         renderControls(body);
+
+        // Start pre-fetching distances for all idle vessels in background
+        prefetchAllDistances();
     }
 
     function closeModal() {
@@ -1219,8 +1437,11 @@
             var originLat = parseFloat(originPort.lat);
             var originLon = parseFloat(originPort.lon);
 
-            resultsContainer.innerHTML = '<div style="color:#8899aa;padding:20px;text-align:center;">Fetching route distances (canals)...</div>';
-            var ranked = await rankPorts(vessel, cache.ports, originLat, originLon, speed);
+            resultsContainer.innerHTML = '<div id="rp-loading-status" style="color:#8899aa;padding:20px;text-align:center;">Fetching route distances...</div>';
+            var ranked = await rankPorts(vessel, cache.ports, originLat, originLon, speed, function(fetched, total) {
+                var el = document.getElementById('rp-loading-status');
+                if (el) el.textContent = 'Fetching route distances... ' + fetched + '/' + total + ' ports';
+            });
             lastResults = ranked;
             currentSort = { col: 'score', asc: false };
             renderResultsTable(resultsContainer, ranked, vessel, speed);
@@ -1280,8 +1501,7 @@
             { key: 'distance', label: 'Distance' },
             { key: 'travelHours', label: 'Travel' },
             { key: 'tripsToday', label: 'Trips Today' },
-            { key: 'profitPerTrip', label: 'Profit/Trip' },
-            { key: 'dailyProfit', label: 'Daily Profit' },
+            { key: 'hijackingRisk', label: 'Pirate Risk' },
             { key: 'score', label: 'Score' },
             { key: 'status', label: 'Status' },
             { key: '_action', label: '' }
@@ -1328,15 +1548,16 @@
 
             var canalBadge = row.usesCanal ? '<span class="rp-canal-badge">CANAL</span>' : '';
 
+            var pirateBadge = row.hijackingRisk > 0 ? '<span style="color:#e74c3c;font-weight:bold">' + row.hijackingRisk + '%</span>' : '<span style="color:#2ecc71">Safe</span>';
+
             tr.innerHTML = '\
-<td>' + row.portCode + '</td>\
+<td>' + row.portCode + ' <button class="rp-goto-btn" data-lat="' + row.lat + '" data-lon="' + row.lon + '" title="Show on map">&#x1f4cd;</button></td>\
 <td>' + formatNumber(row.effectiveDemand) + unit + '</td>\
 <td>' + (row.enRouteCount > 0 ? row.enRouteCount + ' ships (' + formatNumber(row.enRouteCapacity) + ')' : '-') + '</td>\
 <td>' + formatNumber(row.distance) + ' nm' + canalBadge + '</td>\
 <td>' + formatHours(row.travelHours) + '</td>\
 <td>' + row.tripsToday + '/' + row.possibleTrips + '</td>\
-<td>' + formatMoney(row.profitPerTrip) + '</td>\
-<td>' + formatMoney(row.dailyProfit) + '</td>\
+<td>' + pirateBadge + '</td>\
 <td>' + renderScoreBar(row.score) + '</td>\
 <td class="rp-status-' + row.status + '">' + row.status.toUpperCase() + '</td>\
 <td></td>';
@@ -1348,10 +1569,21 @@
                 sendBtn.className = 'rp-send-btn';
                 sendBtn.textContent = 'Send';
                 sendBtn.dataset.port = row.portCode;
-                sendBtn.onclick = (function(portCode, btn, vesselObj) {
-                    return function() { handleSendShip(vesselObj, portCode, speed, btn); };
-                })(row.portCode, sendBtn, vessel);
+                sendBtn.onclick = (function(portCode, btn, vesselObj, risk) {
+                    return function() { handleSendShip(vesselObj, portCode, speed, btn, risk); };
+                })(row.portCode, sendBtn, vessel, row.hijackingRisk);
                 sendCell.appendChild(sendBtn);
+            }
+
+            // Wire up "Go to" button
+            var gotoBtn = tr.querySelector('.rp-goto-btn');
+            if (gotoBtn) {
+                gotoBtn.onclick = (function(lat, lon, portCode) {
+                    return function(e) {
+                        e.stopPropagation();
+                        goToPortOnMap(parseFloat(lat), parseFloat(lon), portCode);
+                    };
+                })(gotoBtn.dataset.lat, gotoBtn.dataset.lon, row.portCode);
             }
 
             tbody.appendChild(tr);
@@ -1359,6 +1591,15 @@
         table.appendChild(tbody);
         tableWrap.appendChild(table);
         container.appendChild(tableWrap);
+
+        // Debug button to view API response
+        if (window._rpRouteDebug) {
+            var debugBtn = document.createElement('button');
+            debugBtn.textContent = 'Show API Debug';
+            debugBtn.style.cssText = 'margin:8px;padding:4px 10px;font-size:11px;background:#333;color:#aaa;border:1px solid #555;border-radius:3px;cursor:pointer;';
+            debugBtn.onclick = function() { prompt('Route API response (Ctrl+A):', window._rpRouteDebug); };
+            container.appendChild(debugBtn);
+        }
     }
 
     function sortResults(arr, col, asc) {
@@ -1383,7 +1624,7 @@
 
     // showErrorLog removed — using _debugLog.push + alert instead
 
-    async function handleSendShip(vessel, destPortCode, speed, btn) {
+    async function handleSendShip(vessel, destPortCode, speed, btn, hijackingRisk) {
         try {
         if (btn.disabled) return;
         btn.disabled = true;
@@ -1391,9 +1632,9 @@
         btn.textContent = 'Sending...';
 
         _debugLog = [];
-        _debugLog.push('Sending ' + vessel.name + ' id:' + vessel.id + ' parked:' + vessel.is_parked + ' status:' + vessel.status + ' from ' + vessel.current_port_code + ' to ' + destPortCode + ' at ' + speed + 'kn');
+        _debugLog.push('Sending ' + vessel.name + ' id:' + vessel.id + ' parked:' + vessel.is_parked + ' status:' + vessel.status + ' from ' + vessel.current_port_code + ' to ' + destPortCode + ' at ' + speed + 'kn' + (hijackingRisk ? ' pirate_risk:' + hijackingRisk + '%' : ''));
 
-        var result = await createRouteAndDepart(vessel.id, vessel.current_port_code, destPortCode, speed);
+        var result = await createRouteAndDepart(vessel.id, vessel.current_port_code, destPortCode, speed, hijackingRisk);
 
         if (result.success) {
             btn.className = 'rp-send-btn sent';
@@ -1464,7 +1705,7 @@
         table.innerHTML = '\
 <thead><tr>\
 <th>Vessel</th><th>Type</th><th>Capacity</th><th>From</th><th>To</th>\
-<th>Distance</th><th>Travel</th><th>Trips</th><th>Profit/Trip</th><th>Daily Profit</th><th>Score</th><th></th>\
+<th>Distance</th><th>Travel</th><th>Trips</th><th>Score</th><th></th>\
 </tr></thead>';
 
         var tbody = document.createElement('tbody');
@@ -1481,8 +1722,6 @@
 <td>' + formatNumber(a.result.distance) + ' nm</td>\
 <td>' + formatHours(a.result.travelHours) + '</td>\
 <td>' + a.result.tripsToday + '</td>\
-<td>' + formatMoney(a.result.profitPerTrip) + '</td>\
-<td>' + formatMoney(a.result.dailyProfit) + '</td>\
 <td>' + renderScoreBar(a.result.score) + '</td>\
 <td></td>';
 
@@ -1492,7 +1731,7 @@
             fleetSendBtn.className = 'rp-send-btn';
             fleetSendBtn.textContent = 'Send';
             fleetSendBtn.onclick = (function(vesselObj, portCode, btn) {
-                return function() { handleSendShip(vesselObj, portCode, speed, btn); };
+                return function() { handleSendShip(vesselObj, portCode, speed, btn, 0); };
             })(a.vessel, a.result.portCode, fleetSendBtn);
             fleetSendCell.appendChild(fleetSendBtn);
 
@@ -1527,5 +1766,11 @@
         await loadSettings();
         addMenuItem('Route Planner', openModal, 15);
         log('Route Planner initialized');
+        // Cache toggleable channel IDs for route API calls (enables shortest-route selection)
+        var routeStore = getStore('route');
+        if (routeStore && routeStore.channels) {
+            _toggleableChannelIds = routeStore.channels.filter(function(c) { return c.toggleable === 1; }).map(function(c) { return c.id; });
+            log('Loaded ' + _toggleableChannelIds.length + ' toggleable channels for route optimization');
+        }
     });
 })();

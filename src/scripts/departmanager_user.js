@@ -18,6 +18,13 @@
 (function() {
     'use strict';
 
+    // Prevent double-injection: if already running in this page context, bail out
+    if (window.__departManagerRunning) {
+        console.warn('[Depart Manager] Already running - skipping duplicate injection');
+        return;
+    }
+    window.__departManagerRunning = true;
+
     var SCRIPT_NAME = 'Depart Manager';
     var SCRIPT_NAME_BRIDGE = 'DepartManager';
     var STORE_NAME = 'data';
@@ -1082,18 +1089,18 @@
         log('Auto-price cache updated for ' + needsFetch.length + ' routes');
     }
 
+    var PURCHASE_COOLDOWN_MS = 30000; // 30 seconds cooldown between purchases
     var lastFuelPurchaseTime = 0;
     var lastCO2PurchaseTime = 0;
-    var PURCHASE_COOLDOWN_MS = 2000; // 2 seconds cooldown between purchases
 
     async function purchaseFuelAPI(amountTons, pricePerTon) {
         try {
             if (amountTons <= 0) return { success: false, error: 'Amount <= 0' };
 
-            // Prevent duplicate purchases within cooldown period
+            // Hard cooldown: prevent duplicate purchases within 30 seconds
             var now = Date.now();
             if (now - lastFuelPurchaseTime < PURCHASE_COOLDOWN_MS) {
-                log('Fuel purchase skipped - cooldown active (' + (PURCHASE_COOLDOWN_MS - (now - lastFuelPurchaseTime)) + 'ms remaining)');
+                log('Fuel purchase skipped - cooldown active (' + Math.round((PURCHASE_COOLDOWN_MS - (now - lastFuelPurchaseTime)) / 1000) + 's remaining)');
                 return { success: false, error: 'cooldown' };
             }
             lastFuelPurchaseTime = now;
@@ -1113,22 +1120,7 @@
 
             if (data.user) updatePiniaStore(data.user);
 
-            // Log to Pirate Analytics
-            try {
-                var paTxKey = 'pirate:PirateAnalytics:data:transactions';
-                var paTxs = JSON.parse(localStorage.getItem(paTxKey) || '[]');
-                paTxs.unshift({
-                    timestamp: Date.now(),
-                    date: new Date().toISOString().split('T')[0],
-                    type: 'bunker_fuel',
-                    label: 'Fuel Purchase',
-                    amountTons: amountTons,
-                    cost: Math.round(amountTons * pricePerTon),
-                    direction: 'out'
-                });
-                if (paTxs.length > 5000) paTxs.length = 5000;
-                localStorage.setItem(paTxKey, JSON.stringify(paTxs));
-            } catch (e) { log('PA tx log (fuel) failed: ' + e.message, 'warn'); }
+            // PA logging handled by pirate-analytics fetch interceptor — no manual log needed
 
             notify('Purchased ' + formatNumber(amountTons) + 't fuel @ $' + formatNumber(pricePerTon), 'success', 'fuel');
             return { success: true, data: data };
@@ -1143,10 +1135,10 @@
         try {
             if (amountTons <= 0) return { success: false, error: 'Amount <= 0' };
 
-            // Prevent duplicate purchases within cooldown period
+            // Hard cooldown: prevent duplicate purchases within 30 seconds
             var now = Date.now();
             if (now - lastCO2PurchaseTime < PURCHASE_COOLDOWN_MS) {
-                log('CO2 purchase skipped - cooldown active (' + (PURCHASE_COOLDOWN_MS - (now - lastCO2PurchaseTime)) + 'ms remaining)');
+                log('CO2 purchase skipped - cooldown active (' + Math.round((PURCHASE_COOLDOWN_MS - (now - lastCO2PurchaseTime)) / 1000) + 's remaining)');
                 return { success: false, error: 'cooldown' };
             }
             lastCO2PurchaseTime = now;
@@ -1166,22 +1158,7 @@
 
             if (data.user) updatePiniaStore(data.user);
 
-            // Log to Pirate Analytics
-            try {
-                var paTxKey2 = 'pirate:PirateAnalytics:data:transactions';
-                var paTxs2 = JSON.parse(localStorage.getItem(paTxKey2) || '[]');
-                paTxs2.unshift({
-                    timestamp: Date.now(),
-                    date: new Date().toISOString().split('T')[0],
-                    type: 'bunker_co2',
-                    label: 'CO2 Purchase',
-                    amountTons: amountTons,
-                    cost: Math.round(amountTons * pricePerTon),
-                    direction: 'out'
-                });
-                if (paTxs2.length > 5000) paTxs2.length = 5000;
-                localStorage.setItem(paTxKey2, JSON.stringify(paTxs2));
-            } catch (e) { log('PA tx log (co2) failed: ' + e.message, 'warn'); }
+            // PA logging handled by pirate-analytics fetch interceptor — no manual log needed
 
             notify('Purchased ' + formatNumber(amountTons) + 't CO2 @ $' + formatNumber(pricePerTon), 'success', 'co2');
             return { success: true, data: data };
@@ -2797,6 +2774,7 @@
         var settings = getSettings();
         if (settings.fuelMode === 'off') return { bought: 0, reason: 'disabled' };
 
+
         var bunker = await getCachedBunkerData();
         var prices = await getCachedPrices();
         if (!bunker || !prices || prices.fuelPrice === null) {
@@ -2890,6 +2868,7 @@
     async function autoRebuyCO2() {
         var settings = getSettings();
         if (settings.co2Mode === 'off') return { bought: 0, reason: 'disabled' };
+
 
         var bunker = await getCachedBunkerData();
         var prices = await getCachedPrices();
@@ -3095,64 +3074,15 @@
                     }
                 }
 
-                // STEP 1: Check if we need fuel and buy BEFORE departure
+                // Check if bunker has enough fuel — skip if not (fuel is purchased AFTER departures)
                 if (bunker.fuel < fuelNeeded) {
-                    if (canBuyFuel) {
-                        var fuelShortfall = fuelNeeded - bunker.fuel + 50; // +50 buffer
-                        var fuelSpace = bunker.maxFuel - bunker.fuel;
-                        var availableCash = Math.max(0, bunker.cash - settings.fuelMinCash);
-                        var maxAffordable = Math.floor(availableCash / prices.fuelPrice);
-                        var fuelToBuy = Math.min(fuelShortfall, fuelSpace, maxAffordable);
-
-                        if (fuelToBuy > 0) {
-                            log(vessel.name + ': Buying ' + fuelToBuy.toFixed(0) + 't fuel (need ' + fuelNeeded.toFixed(0) + 't, have ' + bunker.fuel.toFixed(0) + 't)');
-                            var fuelResult = await purchaseFuelAPI(fuelToBuy, prices.fuelPrice);
-                            if (fuelResult.success) {
-                                await new Promise(function(r) { setTimeout(r, 300); });
-                                invalidateBunkerCache();
-                                bunker = await getCachedBunkerData();
-                            }
-                        }
-                    }
-
-                    // Final fuel check
-                    if (bunker.fuel < fuelNeeded) {
-                        var fuelMsg = vessel.name + ': not_enough_fuel (' + bunker.fuel.toFixed(0) + 't < ' + fuelNeeded.toFixed(0) + 't)';
-                        log(fuelMsg);
-                        skipped.push(fuelMsg);
-                        continue;
-                    }
+                    var fuelMsg = vessel.name + ': not_enough_fuel (' + bunker.fuel.toFixed(0) + 't < ' + fuelNeeded.toFixed(0) + 't) - will buy after departures';
+                    log(fuelMsg);
+                    skipped.push(fuelMsg);
+                    continue;
                 }
 
-                // STEP 2: Buy CO2 BEFORE departure (CO2 can go negative - no skip!)
-                var co2Deficit = 0;
-                if (bunker.co2 < co2Needed && canBuyCO2) {
-                    var co2Shortfall = co2Needed - bunker.co2;
-                    var co2Space = bunker.maxCO2 - bunker.co2;
-                    var availableCashCO2 = Math.max(0, bunker.cash - settings.co2MinCash);
-                    var maxAffordableCO2 = Math.floor(availableCashCO2 / prices.co2Price);
-                    // Buy what we need, but max what fits in bunker
-                    var co2ToBuy = Math.min(co2Shortfall, co2Space, maxAffordableCO2);
-
-                    if (co2ToBuy > 0) {
-                        log(vessel.name + ': Buying ' + co2ToBuy.toFixed(0) + 't CO2 (need ' + co2Needed.toFixed(0) + 't, have ' + bunker.co2.toFixed(0) + 't, max ' + bunker.maxCO2.toFixed(0) + 't)');
-                        var co2Result = await purchaseCO2API(co2ToBuy, prices.co2Price);
-                        if (co2Result.success) {
-                            await new Promise(function(r) { setTimeout(r, 300); });
-                            invalidateBunkerCache();
-                            bunker = await getCachedBunkerData();
-                        }
-                    }
-
-                    // Calculate deficit: what exceeds bunker capacity (will go negative after depart)
-                    if (co2Needed > bunker.maxCO2) {
-                        co2Deficit = co2Needed - bunker.maxCO2;
-                        log(vessel.name + ': CO2 deficit ' + co2Deficit.toFixed(0) + 't (need ' + co2Needed.toFixed(0) + 't > max ' + bunker.maxCO2.toFixed(0) + 't)');
-                    }
-                }
-                // NO SKIP FOR CO2 - game allows negative CO2!
-
-                // STEP 3: Depart the vessel (with tracking if enabled)
+                // DEPART the vessel (with tracking if enabled)
                 var result;
                 if (settings.contributionTrackingEnabled) {
                     result = await departWithTracking(vessel, manual ? 'manual' : 'auto');
@@ -3177,13 +3107,6 @@
 
                     log(vessel.name + ': Departed');
 
-                    // STEP 4: Buy back CO2 deficit immediately after departure
-                    if (co2Deficit > 0 && canBuyCO2) {
-                        log(vessel.name + ': Buying back ' + co2Deficit.toFixed(0) + 't CO2 deficit');
-                        await purchaseCO2API(co2Deficit, prices.co2Price);
-                        await new Promise(function(r) { setTimeout(r, 300); });
-                    }
-
                     // Every 10 ships: show batch summary
                     if (batchCount >= 10) {
                         var batchMsg = 'Departed ' + batchCount + ' | +$' + formatNumber(batchIncome) +
@@ -3204,22 +3127,8 @@
                 await new Promise(function(r) { setTimeout(r, 400); });
             }
 
-            // Post-depart: Avoid negative CO2 (Intelligent mode only)
-            var CO2_BUFFER = 100;
-            if (settings.avoidNegativeCO2 && departedCount > 0 && settings.co2Mode === 'intelligent') {
-                invalidateBunkerCache();
-                bunker = await getCachedBunkerData();
-                if (bunker && bunker.co2 < CO2_BUFFER && prices.co2Price > settings.co2PriceThreshold) {
-                    if (prices.co2Price <= settings.co2IntelligentMaxPrice) {
-                        var refillAmount = Math.ceil(CO2_BUFFER - bunker.co2);
-                        log('CO2 buffer refill: ' + bunker.co2.toFixed(1) + 't -> ' + CO2_BUFFER + 't');
-                        await purchaseCO2API(refillAmount, prices.co2Price);
-                    }
-                }
-            }
-
-            // Post-depart fill removed — autoRebuyFuel/CO2 in periodicCheck handles refills
-            // This was causing double purchases (fill before depart + fill after depart)
+            // All fuel/CO2 purchasing handled by standalone autoRebuyFuel/autoRebuyCO2 in periodicCheck
+            // Runs AFTER departures to avoid any double-purchase issues
 
             // Send notification for remaining batch
             if (batchCount > 0) {
@@ -4667,7 +4576,16 @@
     // ============================================
     // PERIODIC CHECK
     // ============================================
+    var periodicCheckRunning = false;
     async function periodicCheck() {
+        // Only the active webview runs periodic checks (prevents multi-webview double purchases)
+        if (window.__pirateBrowserIsActive === false) return null;
+
+        if (periodicCheckRunning) {
+            log('periodicCheck already running - skipping');
+            return null;
+        }
+        periodicCheckRunning = true;
         var settings = getSettings();
         var departResult = null;
         log('Running periodic check...');
@@ -4694,6 +4612,20 @@
                 }
             }
 
+            // Depart vessels FIRST, then buy fuel/CO2 afterward
+            if (settings.autoDepartEnabled) {
+                try {
+                    departResult = await autoDepartVessels(false);
+                } catch (e) {
+                    log('autoDepartVessels error: ' + e.message, 'error');
+                }
+            }
+
+            // Invalidate bunker cache so rebuy sees post-depart fuel/CO2 levels
+            invalidateBunkerCache();
+            cycleCache.bunker = null;
+
+            // Standalone fuel/CO2 rebuy — runs AFTER departures (or standalone if depart is off)
             if (settings.fuelMode !== 'off') {
                 try {
                     await autoRebuyFuel();
@@ -4710,14 +4642,6 @@
                 }
             }
 
-            if (settings.autoDepartEnabled) {
-                try {
-                    departResult = await autoDepartVessels(false);
-                } catch (e) {
-                    log('autoDepartVessels error: ' + e.message, 'error');
-                }
-            }
-
             saveLastCheckTime();
             log('Periodic check completed');
         } finally {
@@ -4725,6 +4649,7 @@
             if (storageSaveTimer) { clearTimeout(storageSaveTimer); storageSaveTimer = null; }
             await flushStorageToDB();
             clearCycleCache();
+            periodicCheckRunning = false;
         }
 
         return departResult;

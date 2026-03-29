@@ -223,13 +223,14 @@ html, body {
   top: calc(100% + 6px);
   right: 0;
   min-width: 220px;
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
   background: var(--bg-panel);
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
   box-shadow: 0 8px 32px rgba(0,0,0,0.6);
   z-index: 500;
   display: none;
-  overflow: hidden;
 }
 .tools-menu.open { display: block; }
 .tools-menu-hdr {
@@ -777,11 +778,15 @@ function createWebview(id) {
 
     // Inject enabled scripts (always inject on load, handles both first load and reloads)
     if (url.startsWith(TARGET)) {
+      // Prevent double injection if did-finish-load fires multiple times
+      if (wv._injecting) return;
+      wv._injecting = true;
+
       // Wait for the page app to fully initialise before injecting
       await new Promise(r => setTimeout(r, 1500));
 
       // Re-check webview is still valid after the wait
-      try { if (!wv.getURL().startsWith(TARGET)) return; } catch { return; }
+      try { if (!wv.getURL().startsWith(TARGET)) { wv._injecting = false; return; } } catch { wv._injecting = false; return; }
 
       const scripts = await window.pirate.scripts.getAllEnabled(id);
 
@@ -792,6 +797,15 @@ function createWebview(id) {
       }).join('\n\n');
 
       if (allSrc) {
+        // Tell this webview if it's the active one (only active webview handles purchases)
+        const isActive = id === activeId;
+        console.log('[INJECT] Webview ' + id + ' isActive=' + isActive + ' (activeId=' + activeId + ', allWebviews=' + [...webviews.keys()].join(',') + ')');
+        try {
+          await wv.executeJavaScript(`window.__pirateBrowserIsActive = ${isActive};`);
+        } catch (e2) {
+          console.error('[inject] isActive', e2.message);
+        }
+
         for (const s of scripts) {
           try {
             await wv.executeJavaScript(s.src);
@@ -800,11 +814,13 @@ function createWebview(id) {
           }
         }
       }
+      wv._injecting = false;
     }
     wv._pendingInject = false;
   });
 
   wv.addEventListener('did-start-loading', () => {
+    wv._injecting = false; // Reset injection guard on new page load
     if (id === activeId) {
       document.getElementById('url-bar').style.opacity = '0.5';
     }
@@ -883,6 +899,11 @@ function switchTo(id) {
     t.classList.toggle('active', t.dataset.id === id)
   );
   activeId = id;
+
+  // Update active flag on all webviews (only active one handles purchases)
+  for (const [vid, w] of webviews) {
+    try { w.executeJavaScript(`window.__pirateBrowserIsActive = ${vid === id};`); } catch (e) {}
+  }
 
   // Refresh scripts panel if open
   if (panelOpen) loadScripts(id);
