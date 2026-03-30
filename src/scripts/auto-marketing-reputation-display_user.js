@@ -753,7 +753,7 @@
             return;
         }
 
-        if (document.hidden) {
+        if (document.hidden && !window.__pirateBrowserDesktop) {
             log('Tab inactive, skipping update');
             return;
         }

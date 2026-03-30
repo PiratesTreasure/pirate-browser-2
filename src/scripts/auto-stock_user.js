@@ -1482,7 +1482,7 @@
 
         var updateTimers = function() {
             // Check if page is visible using Page Visibility API
-            if (document.hidden) return;
+            if (document.hidden && !window.__pirateBrowserDesktop) return;
 
             var timers = container.querySelectorAll('.as-timer');
             var now = Math.floor(Date.now() / 1000);
@@ -1530,7 +1530,7 @@
     function watchFinanceModal() {
         var checkModal = function() {
             // Skip check if page is hidden
-            if (document.hidden) return;
+            if (document.hidden && !window.__pirateBrowserDesktop) return;
 
             var bottomNav = document.getElementById('bottom-nav');
             var stockBtn = bottomNav && bottomNav.querySelector('#stock-page-btn');
@@ -1550,7 +1550,7 @@
 
         // Stop interval when page becomes hidden
         document.addEventListener('visibilitychange', function() {
-            if (document.hidden && sellTimerInterval) {
+            if (document.hidden && sellTimerInterval && !window.__pirateBrowserDesktop) {
                 stopSellTimers();
             }
         });

@@ -549,7 +549,7 @@ webview.active { display: flex; }
       </svg>
       <div>
         <div class="logo-text">Pirate Browser</div>
-        <div class="logo-ver" id="app-version">v2.0.0</div>
+        <div class="logo-ver" id="app-version" onclick="checkForUpdates()" style="cursor:pointer;-webkit-app-region:no-drag;" title="Click to check for updates">v2.0.0</div>
       </div>
     </div>
     <div class="titlebar-spacer"></div>
@@ -742,6 +742,7 @@ function createWebview(id) {
 
   const wv = document.createElement('webview');
   wv.id = `wv-${id}`;
+  wv.setAttribute('backgroundthrottling', 'false'); // keep scripts running when minimized
   wv.setAttribute('partition', partition);
   wv.setAttribute('src', TARGET);
   wv.setAttribute('useragent',
@@ -801,7 +802,7 @@ function createWebview(id) {
         const isActive = id === activeId;
         console.log('[INJECT] Webview ' + id + ' isActive=' + isActive + ' (activeId=' + activeId + ', allWebviews=' + [...webviews.keys()].join(',') + ')');
         try {
-          await wv.executeJavaScript(`window.__pirateBrowserIsActive = ${isActive};`);
+          await wv.executeJavaScript(`window.__pirateBrowserIsActive = ${isActive}; window.__pirateBrowserDesktop = true;`);
         } catch (e2) {
           console.error('[inject] isActive', e2.message);
         }
@@ -1383,10 +1384,17 @@ function initUpdater() {
     const txt = document.getElementById('update-progress-text');
     if (txt) txt.textContent = 'Download complete — click to restart and install.';
     const modal = document.getElementById('update-modal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.style.opacity = '1';
+      modal.style.pointerEvents = 'all';
+    }
+    const container = document.getElementById('webview-container');
+    if (container) container.style.display = 'none';
   });
 
   window.pirate.updater.on('updater:error', (msg) => {
+    console.error('[Updater] Error:', msg);
     const btn = document.getElementById('update-action-btn');
     if (btn) { btn.textContent = 'Retry'; btn.onclick = () => startUpdate(); }
     const notes = document.getElementById('update-notes');

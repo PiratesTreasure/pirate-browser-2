@@ -662,9 +662,9 @@
 
     // Pause on background, resume on foreground (Android GeckoView safe)
     document.addEventListener('visibilitychange', function() {
-        if (document.hidden) {
+        if (document.hidden && !window.__pirateBrowserDesktop) {
             stopHeartbeat();
-        } else {
+        } else if (!document.hidden) {
             attachObserver();
             startHeartbeat();
             debouncedInit();

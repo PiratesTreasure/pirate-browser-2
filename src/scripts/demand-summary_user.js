@@ -2335,9 +2335,9 @@
         // Start/stop based on page visibility
         startMapMarkerCheck();
         document.addEventListener('visibilitychange', function() {
-            if (document.hidden) {
+            if (document.hidden && !window.__pirateBrowserDesktop) {
                 stopMapMarkerCheck();
-            } else {
+            } else if (!document.hidden) {
                 startMapMarkerCheck();
             }
         });

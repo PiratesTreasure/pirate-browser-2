@@ -554,40 +554,47 @@
 
             // Step 3: Fetch auto-prices and update route with game's recommended prices
             _debugLog.push('Step 3: Fetching auto-prices');
-            try {
-                var autoPriceResp = await fetch(API_BASE + '/demand/auto-price', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ user_vessel_id: vesselId, route_id: routeId })
-                });
-                if (autoPriceResp.ok) {
-                    var autoPriceData = await autoPriceResp.json();
-                    if (autoPriceData && autoPriceData.data) {
-                        var ap = autoPriceData.data;
-                        _debugLog.push('Auto-prices: ' + JSON.stringify(ap));
-                        // Update the route with recommended prices
-                        var updateResp = await fetch(API_BASE + '/route/update-route-data', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include',
-                            body: JSON.stringify({
-                                user_vessel_id: vesselId,
-                                speed: speed,
-                                guards: guards,
-                                prices: ap
-                            })
-                        });
-                        if (updateResp.ok) {
-                            _debugLog.push('Route prices updated to auto-prices');
-                        } else {
-                            _debugLog.push('Failed to update prices: HTTP ' + updateResp.status);
-                        }
-                    }
-                }
-            } catch (priceErr) {
-                _debugLog.push('Auto-price fetch error: ' + priceErr.message);
+            var autoPriceResp = await fetch(API_BASE + '/demand/auto-price', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ user_vessel_id: vesselId, route_id: routeId })
+            });
+            if (!autoPriceResp.ok) {
+                _debugLog.push('Auto-price fetch failed: HTTP ' + autoPriceResp.status);
+                return { success: false, error: 'Failed to fetch auto-prices (HTTP ' + autoPriceResp.status + ')' };
             }
+            var autoPriceData = await autoPriceResp.json();
+            if (!autoPriceData || !autoPriceData.data) {
+                _debugLog.push('Auto-price response empty: ' + JSON.stringify(autoPriceData));
+                return { success: false, error: 'Auto-price returned no data' };
+            }
+            var ap = autoPriceData.data;
+            _debugLog.push('Auto-prices raw: ' + JSON.stringify(ap));
+            // Map auto-price field names (ref, crude) to vessel price fields (refrigerated, crude_oil)
+            var prices = {
+                dry: ap.dry,
+                refrigerated: ap.ref,
+                fuel: ap.fuel,
+                crude_oil: ap.crude
+            };
+            _debugLog.push('Mapped prices: ' + JSON.stringify(prices));
+            var updateResp = await fetch(API_BASE + '/route/update-route-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    user_vessel_id: vesselId,
+                    speed: speed,
+                    guards: guards,
+                    prices: prices
+                })
+            });
+            if (!updateResp.ok) {
+                _debugLog.push('Failed to update prices: HTTP ' + updateResp.status);
+                return { success: false, error: 'Failed to set prices (HTTP ' + updateResp.status + ')' };
+            }
+            _debugLog.push('Route prices updated to auto-prices');
 
             // Step 4: Depart
             var departResp = await fetch(API_BASE + '/route/depart', {

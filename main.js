@@ -4,7 +4,7 @@
 // ============================================================
 'use strict';
 
-const { app, BrowserWindow, ipcMain, session, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, session, dialog, shell, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 
@@ -92,8 +92,12 @@ function createMainWindow() {
       contextIsolation:  true,
       sandbox:           false,
       webviewTag:        true,   // enable <webview> tags
+      backgroundThrottling: false, // keep scripts running when minimized
     }
   });
+
+  // Prevent OS from suspending the app process when idle
+  powerSaveBlocker.start('prevent-app-suspension');
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'renderer', 'index.html'));
 
@@ -280,9 +284,10 @@ app.whenReady().then(() => {
   }
   createMainWindow();
   setupUpdaterEvents();
-  // Auto-check for updates 5s after launch (production only)
+  // Auto-check for updates 5s after launch, then every 30 min (production only)
   if (!isDev && autoUpdater) {
-    setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5000);
+    setTimeout(() => autoUpdater.checkForUpdates().catch(e => console.error('[Updater] Check failed:', e.message)), 5000);
+    setInterval(() => autoUpdater.checkForUpdates().catch(e => console.error('[Updater] Periodic check failed:', e.message)), 30 * 60 * 1000);
   }
 });
 
