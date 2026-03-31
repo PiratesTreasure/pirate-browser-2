@@ -34,10 +34,6 @@
     var settings = {
         enabled: false,
         instant4Percent: true,
-        gradual8Percent: false,
-        gradualIncreaseStep: 1,
-        gradualIncreaseInterval: 25,
-        targetPercent: 8,
         maxGuardsOnPirateRoutes: true,
         notifyIngame: true,
         notifySystem: false
@@ -47,11 +43,9 @@
     var isModalOpen = false;
     var modalListenerAttached = false;
     var autoPriceCacheData = {};
-    var gradualIncreaseData = {};
     var hijackingRiskCache = new Map();
     var routesCached = false;
     var autoPriceDirty = false;
-    var gradualDirty = false;
 
     // ========== UTILITY ==========
     function escapeHtml(str) {
@@ -236,47 +230,6 @@
             };
         }
         return null;
-    }
-
-    // ========== GRADUAL INCREASE TRACKING ==========
-    async function loadGradualIncreaseData() {
-        var cached = await dbGet('gradualIncrease');
-        if (cached) {
-            gradualIncreaseData = cached;
-        }
-        return gradualIncreaseData;
-    }
-
-    async function saveGradualIncreaseData() {
-        await dbSet('gradualIncrease', gradualIncreaseData);
-    }
-
-    function getLastGradualIncrease(vesselId) {
-        return gradualIncreaseData[vesselId] || 0;
-    }
-
-    function setLastGradualIncrease(vesselId, timestamp) {
-        gradualIncreaseData[vesselId] = timestamp;
-        gradualDirty = true;
-    }
-
-    function cleanGradualIncreaseData(vessels) {
-        var vesselIdSet = {};
-        for (var i = 0; i < vessels.length; i++) {
-            vesselIdSet[vessels[i].id] = true;
-        }
-        var keys = Object.keys(gradualIncreaseData);
-        var removed = 0;
-        for (var j = 0; j < keys.length; j++) {
-            if (!vesselIdSet[keys[j]]) {
-                delete gradualIncreaseData[keys[j]];
-                removed++;
-                gradualDirty = true;
-            }
-        }
-        if (removed > 0) {
-            log('Cleaned ' + removed + ' stale gradual increase entries');
-        }
     }
 
     // ========== PENDING ROUTE SETTINGS (Shared) ==========
@@ -500,85 +453,33 @@
         var newGuards = vessel.route_guards || 0;
         var needsUpdate = false;
 
-        // 4% Instant Markup
+        // 4% Instant Markup — peg exactly to autoprice × 1.04 (bidirectional)
         if (settings.instant4Percent) {
             if (currentPrices.dry && autoprice.dry) {
-                var diffDry = calculatePriceDiffPercent(currentPrices.dry, autoprice.dry);
-                if (diffDry < 4) {
-                    newPrices.dry = Math.round(autoprice.dry * 1.04);
+                var targetDry = Math.round(autoprice.dry * 1.04);
+                if (currentPrices.dry !== targetDry) {
+                    newPrices.dry = targetDry;
                     needsUpdate = true;
                 }
             }
             if (currentPrices.refrigerated && autoprice.ref) {
-                var diffRef = calculatePriceDiffPercent(currentPrices.refrigerated, autoprice.ref);
-                if (diffRef < 4) {
-                    newPrices.refrigerated = Math.round(autoprice.ref * 1.04);
+                var targetRef = Math.round(autoprice.ref * 1.04);
+                if (currentPrices.refrigerated !== targetRef) {
+                    newPrices.refrigerated = targetRef;
                     needsUpdate = true;
                 }
             }
             if (currentPrices.fuel && autoprice.fuel) {
-                var diffFuel = calculatePriceDiffPercent(currentPrices.fuel, autoprice.fuel);
-                if (diffFuel < 4) {
-                    newPrices.fuel = Math.round(autoprice.fuel * 1.04 * 100) / 100;
+                var targetFuel = Math.round(autoprice.fuel * 1.04 * 100) / 100;
+                if (currentPrices.fuel !== targetFuel) {
+                    newPrices.fuel = targetFuel;
                     needsUpdate = true;
                 }
             }
             if (currentPrices.crude_oil && autoprice.crude) {
-                var diffCrude = calculatePriceDiffPercent(currentPrices.crude_oil, autoprice.crude);
-                if (diffCrude < 4) {
-                    newPrices.crude_oil = Math.round(autoprice.crude * 1.04 * 100) / 100;
-                    needsUpdate = true;
-                }
-            }
-        }
-
-        // Gradual Increase
-        if (settings.gradual8Percent) {
-            var now = Date.now();
-            var lastIncrease = getLastGradualIncrease(vessel.id);
-            var targetPercent = settings.targetPercent;
-            var increaseStep = settings.gradualIncreaseStep;
-            var intervalMs = settings.gradualIncreaseInterval * 60 * 60 * 1000;
-            var stepMultiplier = 1 + increaseStep / 100;
-
-            if (!lastIncrease || (now - lastIncrease) >= intervalMs) {
-                var gradualUpdated = false;
-
-                if (currentPrices.dry && autoprice.dry) {
-                    var currentDiffDry = calculatePriceDiffPercent(newPrices.dry || currentPrices.dry, autoprice.dry);
-                    if (currentDiffDry < targetPercent) {
-                        var maxPriceDry = Math.round(autoprice.dry * (1 + targetPercent / 100));
-                        newPrices.dry = Math.min(Math.round((newPrices.dry || currentPrices.dry) * stepMultiplier), maxPriceDry);
-                        gradualUpdated = true;
-                    }
-                }
-                if (currentPrices.refrigerated && autoprice.ref) {
-                    var currentDiffRef = calculatePriceDiffPercent(newPrices.refrigerated || currentPrices.refrigerated, autoprice.ref);
-                    if (currentDiffRef < targetPercent) {
-                        var maxPriceRef = Math.round(autoprice.ref * (1 + targetPercent / 100));
-                        newPrices.refrigerated = Math.min(Math.round((newPrices.refrigerated || currentPrices.refrigerated) * stepMultiplier), maxPriceRef);
-                        gradualUpdated = true;
-                    }
-                }
-                if (currentPrices.fuel && autoprice.fuel) {
-                    var currentDiffFuel = calculatePriceDiffPercent(newPrices.fuel || currentPrices.fuel, autoprice.fuel);
-                    if (currentDiffFuel < targetPercent) {
-                        var maxPriceFuel = Math.round(autoprice.fuel * (1 + targetPercent / 100) * 100) / 100;
-                        newPrices.fuel = Math.min(Math.round((newPrices.fuel || currentPrices.fuel) * stepMultiplier * 100) / 100, maxPriceFuel);
-                        gradualUpdated = true;
-                    }
-                }
-                if (currentPrices.crude_oil && autoprice.crude) {
-                    var currentDiffCrude = calculatePriceDiffPercent(newPrices.crude_oil || currentPrices.crude_oil, autoprice.crude);
-                    if (currentDiffCrude < targetPercent) {
-                        var maxPriceCrude = Math.round(autoprice.crude * (1 + targetPercent / 100) * 100) / 100;
-                        newPrices.crude_oil = Math.min(Math.round((newPrices.crude_oil || currentPrices.crude_oil) * stepMultiplier * 100) / 100, maxPriceCrude);
-                        gradualUpdated = true;
-                    }
-                }
-
-                if (gradualUpdated) {
-                    setLastGradualIncrease(vessel.id, now);
+                var targetCrude = Math.round(autoprice.crude * 1.04 * 100) / 100;
+                if (currentPrices.crude_oil !== targetCrude) {
+                    newPrices.crude_oil = targetCrude;
                     needsUpdate = true;
                 }
             }
@@ -630,7 +531,6 @@
             }
 
             await initAutoPriceCache(vessels);
-            cleanGradualIncreaseData(vessels);
 
             var routeUpdates = [];
             for (var i = 0; i < vessels.length; i++) {
@@ -658,10 +558,6 @@
 
             // Flush all batched saves
             await flushPendingRouteSettings();
-            if (gradualDirty) {
-                await saveGradualIncreaseData();
-                gradualDirty = false;
-            }
             if (autoPriceDirty) {
                 await saveAutoPriceCache();
                 autoPriceDirty = false;
@@ -956,35 +852,8 @@
                         <input type="checkbox" id="se-instant4" ' + (settings.instant4Percent ? 'checked' : '') + (settings.enabled ? '' : ' disabled') + '\
                                style="width:20px;height:20px;margin-right:12px;margin-top:2px;flex-shrink:0;accent-color:#0db8f4;cursor:pointer;">\
                         <span style="text-align:left;"><span style="font-weight:600;">4% Instant Markup</span>\
-                        <span style="display:block;font-size:12px;color:#626b90;margin-top:2px;">Raise prices below 4% to 4%</span></span>\
+                        <span style="display:block;font-size:12px;color:#626b90;margin-top:2px;">Peg prices exactly at 4% above auto-price (corrects both too-low and too-high)</span></span>\
                     </label>\
-                </div>\
-                <div style="margin-bottom:20px;">\
-                    <label style="display:flex;align-items:center;cursor:pointer;">\
-                        <input type="checkbox" id="se-gradual" ' + (settings.gradual8Percent ? 'checked' : '') + (settings.enabled ? '' : ' disabled') + '\
-                               style="width:20px;height:20px;margin-right:12px;accent-color:#0db8f4;cursor:pointer;">\
-                        <span style="font-weight:600;">Gradual Increase</span>\
-                    </label>\
-                </div>\
-                <div id="se-gradual-options" style="margin-bottom:20px;padding-left:32px;' + (settings.gradual8Percent ? '' : 'display:none;') + '">\
-                    <div style="display:flex;gap:12px;margin-bottom:12px;">\
-                        <div style="flex:1;">\
-                            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#01125d;">Step (%)</label>\
-                            <input type="number" id="se-step" min="1" max="10" value="' + escapeHtml(settings.gradualIncreaseStep) + '"' + (settings.enabled ? '' : ' disabled') + '\
-                                   class="redesign" style="width:100%;height:2rem;padding:0 0.5rem;background:#ebe9ea;border:0;border-radius:7px;color:#01125d;font-size:14px;font-family:Lato,sans-serif;text-align:center;box-sizing:border-box;">\
-                        </div>\
-                        <div style="flex:1;">\
-                            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#01125d;">Interval (h)</label>\
-                            <input type="number" id="se-interval" min="1" max="168" value="' + escapeHtml(settings.gradualIncreaseInterval) + '"' + (settings.enabled ? '' : ' disabled') + '\
-                                   class="redesign" style="width:100%;height:2rem;padding:0 0.5rem;background:#ebe9ea;border:0;border-radius:7px;color:#01125d;font-size:14px;font-family:Lato,sans-serif;text-align:center;box-sizing:border-box;">\
-                        </div>\
-                        <div style="flex:1;">\
-                            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#01125d;">Max (%)</label>\
-                            <input type="number" id="se-target" min="1" max="20" value="' + escapeHtml(settings.targetPercent) + '"' + (settings.enabled ? '' : ' disabled') + '\
-                                   class="redesign" style="width:100%;height:2rem;padding:0 0.5rem;background:#ebe9ea;border:0;border-radius:7px;color:#01125d;font-size:14px;font-family:Lato,sans-serif;text-align:center;box-sizing:border-box;">\
-                        </div>\
-                    </div>\
-                    <div style="font-size:11px;color:#626b90;">Increase prices by Step% every Interval hours until Max%</div>\
                 </div>\
                 <div style="margin-bottom:20px;">\
                     <label style="display:flex;align-items:flex-start;cursor:pointer;">\
@@ -1032,12 +901,6 @@
             }
         });
 
-        // Toggle gradual options visibility
-        document.getElementById('se-gradual').addEventListener('change', function() {
-            var opts = document.getElementById('se-gradual-options');
-            opts.style.display = this.checked ? '' : 'none';
-        });
-
         document.getElementById('se-run-now').addEventListener('click', function() {
             var btn = this;
             btn.disabled = true;
@@ -1051,10 +914,6 @@
         document.getElementById('se-save').addEventListener('click', function() {
             var enabled = document.getElementById('se-enabled').checked;
             var instant4 = document.getElementById('se-instant4').checked;
-            var gradual = document.getElementById('se-gradual').checked;
-            var step = Math.max(1, Math.min(10, parseInt(document.getElementById('se-step').value, 10) || 1));
-            var interval = Math.max(1, Math.min(168, parseInt(document.getElementById('se-interval').value, 10) || 25));
-            var target = Math.max(1, Math.min(20, parseInt(document.getElementById('se-target').value, 10) || 8));
             var guards = document.getElementById('se-guards').checked;
             var notifyIngame = document.getElementById('se-notify-ingame').checked;
             var notifySystem = document.getElementById('se-notify-system').checked;
@@ -1062,10 +921,6 @@
             var wasEnabled = settings.enabled;
             settings.enabled = enabled;
             settings.instant4Percent = instant4;
-            settings.gradual8Percent = gradual;
-            settings.gradualIncreaseStep = step;
-            settings.gradualIncreaseInterval = interval;
-            settings.targetPercent = target;
             settings.maxGuardsOnPirateRoutes = guards;
             settings.notifyIngame = notifyIngame;
             settings.notifySystem = notifySystem;
@@ -1113,7 +968,6 @@
 
         await loadSettings();
         await loadAutoPriceCache();
-        await loadGradualIncreaseData();
         setupModalWatcher();
 
         if (settings.enabled) {
