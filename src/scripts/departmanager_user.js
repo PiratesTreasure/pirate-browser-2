@@ -4707,6 +4707,25 @@
         }
     });
 
+    // Handle Chrome Page Lifecycle freeze/resume (fires when browser freezes idle pages)
+    document.addEventListener('freeze', function() {
+        log('[Freeze] Page frozen by browser');
+    });
+    document.addEventListener('resume', function() {
+        if (!monitoringInterval) return;
+        log('[Freeze] Page resumed from freeze — catch-up check');
+        clearCycleCache();
+        periodicCheck();
+    });
+
+    // Handle system sleep/wake forwarded from Electron main process
+    document.addEventListener('__pirateSystemResumed', function() {
+        if (!monitoringInterval) return;
+        log('[Wake] System resumed — catch-up check');
+        clearCycleCache();
+        periodicCheck();
+    });
+
     function requestNotificationPermission() {
         if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
             Notification.requestPermission();

@@ -296,11 +296,28 @@
     // ============================================
     // AUTO DAILY POST
     // ============================================
+
+    // Wait for ChatBot to be available and enabled, up to maxWaitMs milliseconds
+    async function waitForChatBot(maxWaitMs) {
+        var waited = 0;
+        var pollMs = 2000;
+        while (waited < maxWaitMs) {
+            if (window.PiratesTreasureChatBot && window.PiratesTreasureChatBot.isEnabled()) {
+                return true;
+            }
+            await new Promise(function(r) { setTimeout(r, pollMs); });
+            waited += pollMs;
+        }
+        return !!(window.PiratesTreasureChatBot && window.PiratesTreasureChatBot.isEnabled());
+    }
+
     async function checkAndAutoPost() {
         if (!settings || !settings.enabled || !settings.autoPostEnabled) return;
 
-        if (!window.PiratesTreasureChatBot || !window.PiratesTreasureChatBot.isEnabled()) {
-            log('ChatBot not available or not enabled, skipping auto-post');
+        // Wait up to 60s for ChatBot to be ready (handles restarts and slow initialisation)
+        var chatBotReady = await waitForChatBot(60000);
+        if (!chatBotReady) {
+            log('ChatBot not available after 60s — skipping auto-post', 'error');
             return;
         }
 
@@ -325,18 +342,20 @@
         }
 
         try {
-            var allSent = true;
+            var sentCount = 0;
             for (var i = 0; i < messages.length; i++) {
                 var sent = await window.PiratesTreasureChatBot.sendAllianceMessage(messages[i]);
                 if (sent === false) {
                     log('Failed to send auto-post part ' + (i + 1), 'error');
-                    allSent = false;
-                    break;
+                } else {
+                    sentCount++;
                 }
             }
-            if (allSent) {
+            if (sentCount > 0) {
                 await dbSet('lastPostedRankingTimestamp', rankingData.updated);
-                log('Auto-posted port update (' + messages.length + ' message(s), new ranking timestamp: ' + rankingData.updated + ')');
+                log('Auto-posted port update (' + sentCount + '/' + messages.length + ' message(s), ranking timestamp: ' + rankingData.updated + ')');
+            } else {
+                log('Auto-post failed — no messages sent successfully', 'error');
             }
         } catch (e) {
             log('Auto-post error: ' + e.message, 'error');

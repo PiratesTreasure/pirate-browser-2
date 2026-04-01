@@ -733,6 +733,20 @@ async function init() {
   }
 
   setTimeout(() => setStatus(true), 1500);
+
+  // Wake up all active webviews when system resumes from sleep or screen unlock
+  if (window.pirate.system) {
+    window.pirate.system.on('system:resumed', () => {
+      console.log('[Renderer] System resumed — waking webviews');
+      webviews.forEach(function(wv, id) {
+        if (webviewReady.get(id)) {
+          wv.executeJavaScript(
+            'document.dispatchEvent(new CustomEvent("__pirateSystemResumed"))'
+          ).catch(function() {});
+        }
+      });
+    });
+  }
 }
 
 // ── Webview management ───────────────────────────────────────
@@ -846,6 +860,37 @@ function createWebview(id) {
     if (e.url && !e.url.startsWith(TARGET)) {
       window.pirate.shell.openExternal(e.url);
     }
+  });
+
+  // Auto-reload on navigation failure (e.g. network dropped, page failed to load)
+  wv.addEventListener('did-fail-load', (event) => {
+    if (event.errorCode === -3) return; // ERR_ABORTED — user navigated away, ignore
+    const url = event.validatedURL || '';
+    if (!url.startsWith(TARGET)) return;
+    console.warn('[Webview] Load failed (code ' + event.errorCode + ') for ' + url + ' — reloading in 3s');
+    setTimeout(() => { try { wv.reload(); } catch(e) {} }, 3000);
+  });
+
+  // Auto-reload if the webview renderer becomes unresponsive
+  wv.addEventListener('unresponsive', () => {
+    console.warn('[Webview] Unresponsive — reloading in 10s if not recovered');
+    wv._unresponsiveTimer = setTimeout(() => {
+      console.error('[Webview] Still unresponsive — forcing reload');
+      try { wv.reload(); } catch(e) {}
+    }, 10000);
+  });
+  wv.addEventListener('responsive', () => {
+    if (wv._unresponsiveTimer) {
+      clearTimeout(wv._unresponsiveTimer);
+      wv._unresponsiveTimer = null;
+    }
+    console.log('[Webview] Responsive again');
+  });
+
+  // Auto-reload on renderer crash
+  wv.addEventListener('crashed', () => {
+    console.error('[Webview] Renderer crashed — reloading');
+    try { wv.reload(); } catch(e) {}
   });
 
   document.getElementById('webview-container').appendChild(wv);

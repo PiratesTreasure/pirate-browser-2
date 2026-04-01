@@ -602,6 +602,14 @@
         log('Monitoring stopped');
     }
 
+    // Resume from Chrome page freeze or system sleep/wake
+    document.addEventListener('resume', function() {
+        if (settings.enabled && monitorInterval) runSmugglersEye(false);
+    });
+    document.addEventListener('__pirateSystemResumed', function() {
+        if (settings.enabled && monitorInterval) runSmugglersEye(false);
+    });
+
     // ========== LOGGING & NOTIFICATIONS ==========
     function log(message, level) {
         var prefix = '[SmugglersEye]';

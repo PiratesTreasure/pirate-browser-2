@@ -53,5 +53,11 @@ contextBridge.exposeInMainWorld('pirate', {
     install:   ()  => ipcRenderer.invoke('updater:install'),
     on:        (event, cb) => ipcRenderer.on(event, (_e, data) => cb(data)),
     off:       (event, cb) => ipcRenderer.off(event, cb),
+  },
+
+  // ── System events ─────────────────────────────────────────
+  system: {
+    on:  (event, cb) => ipcRenderer.on(event,  (_e, data) => cb(data)),
+    off: (event, cb) => ipcRenderer.off(event, cb),
   }
 });

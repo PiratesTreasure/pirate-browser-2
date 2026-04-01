@@ -4,7 +4,7 @@
 // ============================================================
 'use strict';
 
-const { app, BrowserWindow, ipcMain, session, dialog, shell, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, session, dialog, shell, powerSaveBlocker, powerMonitor } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 
@@ -96,8 +96,22 @@ function createMainWindow() {
     }
   });
 
-  // Prevent OS from suspending the app process when idle
-  powerSaveBlocker.start('prevent-app-suspension');
+  // Prevent the display from sleeping and the OS from suspending the process
+  powerSaveBlocker.start('prevent-display-sleep');
+
+  // Wake up webviews when system resumes from sleep or screen unlock
+  powerMonitor.on('resume', () => {
+    console.log('[PowerMonitor] System resumed from sleep');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('system:resumed');
+    }
+  });
+  powerMonitor.on('unlock-screen', () => {
+    console.log('[PowerMonitor] Screen unlocked');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('system:resumed');
+    }
+  });
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'renderer', 'index.html'));
 
@@ -272,6 +286,14 @@ ipcMain.on('accounts:setup-partition', (_e, { partition }) => {
 
 // ── Open external links in system browser ────────────────────
 ipcMain.on('shell:open-external', (_e, url) => shell.openExternal(url));
+
+// ============================================================
+//  Prevent Chrome from throttling or freezing background renderers
+//  Must be set before app.whenReady()
+// ============================================================
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 
 // ============================================================
 //  App lifecycle
