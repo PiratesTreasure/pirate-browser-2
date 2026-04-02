@@ -4584,9 +4584,6 @@
     // ============================================
     var periodicCheckRunning = false;
     async function periodicCheck() {
-        // Only the active webview runs periodic checks (prevents multi-webview double purchases)
-        if (window.__pirateBrowserIsActive === false) return null;
-
         if (periodicCheckRunning) {
             log('periodicCheck already running - skipping');
             return null;
