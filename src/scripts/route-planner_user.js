@@ -939,32 +939,40 @@
         for (var k = 0; k < scored.length; k++) {
             var s = scored[k];
 
-            // Demand sustainability score (0-1)
+            // Demand sustainability score (0-1): ratio of sustainable to possible trips
             var sustainScore = s.possibleTrips > 0 ? Math.min(1, s.sustainableTrips / s.possibleTrips) : 0;
+
+            // Depth factor: rewards ports where multiple trips are viable.
+            // A port supporting only 1 trip scores ~0.33; 3+ trips scores 1.0.
+            var depthFactor = Math.min(1, s.tripsToday / 3);
+            var effectiveSustainScore = sustainScore * depthFactor;
 
             // Travel time sweet spot — Gaussian centered on ideal (e.g. 3h)
             var travelDiff = s.travelHours - idealHours;
             var travelScore = Math.exp(-(travelDiff * travelDiff) / (2 * sigma * sigma));
 
-            // Composite score (0-100)
-            s.score = Math.round(
-                (sustainScore * w.demandSustainability +
-                 travelScore * w.travelTime)
-            );
+            // Composite score (0-100): 60% demand (dynamic), 40% travel time.
+            // Demand weight itself scales with effective sustainability, so high-demand
+            // ports stand out strongly and 1-trip ports score much lower.
+            var demandWeight = effectiveSustainScore * 60;
+            s.score = Math.round(travelScore * 40 + effectiveSustainScore * demandWeight);
 
-            s._sustainScore = sustainScore;
+            s._sustainScore = effectiveSustainScore;
             s._travelScore = travelScore;
         }
 
-        // Sort by score descending
-        scored.sort(function(a, b) { return b.score - a.score; });
+        // Sort: primary score desc, secondary effective demand desc (tie-break)
+        scored.sort(function(a, b) {
+            if (b.score !== a.score) return b.score - a.score;
+            return (b.effectiveDemand || 0) - (a.effectiveDemand || 0);
+        });
 
         return scored;
     }
 
     // ========== FLEET MODE ==========
 
-    function planFleet(vessels, ports, speed) {
+    async function planFleet(vessels, ports, speed, statusCallback) {
         // Sort vessels by capacity descending (assign biggest first)
         var sorted = vessels.slice().sort(function(a, b) {
             return getVesselCapacity(b) - getVesselCapacity(a);
@@ -1007,6 +1015,10 @@
             var originLon = parseFloat(originPort.lon);
             if (isNaN(originLat) || isNaN(originLon)) continue;
 
+            // Fetch real canal-aware distances from API (same as single-vessel mode)
+            if (statusCallback) statusCallback('Fetching routes for ' + vessel.name + '...');
+            var apiRoutes = await fetchRouteDistances(vessel.id, vessel.current_port_code, null);
+
             var vesselCap = getVesselCapacity(vessel);
             var bestPort = null;
             var bestScore = -Infinity;
@@ -1023,7 +1035,13 @@
                 var availDemand = demandCache[port.code] ? demandCache[port.code][vessel.capacity_type] || 0 : 0;
                 if (availDemand < vesselCap) continue; // Not enough demand
 
-                var distance = haversineDistance(originLat, originLon, pLat, pLon);
+                // Use real API distance if available, else fall back to Haversine
+                var distance;
+                if (apiRoutes && apiRoutes[port.code]) {
+                    distance = apiRoutes[port.code].distance;
+                } else {
+                    distance = haversineDistance(originLat, originLon, pLat, pLon);
+                }
                 if (distance <= 0) continue;
 
                 var travelHours = distance / speed / GAME_TIME_FACTOR + PORT_OVERHEAD_HOURS;
@@ -1040,13 +1058,16 @@
                 var sigma = idealHours * 0.8;
 
                 var sustainScore = possibleTrips > 0 ? Math.min(1, sustainableTrips / possibleTrips) : 0;
+                var depthFactor = Math.min(1, tripsToday / 3);
+                var effectiveSustainScore = sustainScore * depthFactor;
                 var travelDiff = travelHours - idealHours;
                 var travelScore = Math.exp(-(travelDiff * travelDiff) / (2 * sigma * sigma));
 
-                var score = sustainScore * w.demandSustainability +
-                            travelScore * w.travelTime;
+                // Same 60/40 dynamic scoring as single-vessel mode
+                var fleetDemandWeight = effectiveSustainScore * 60;
+                var score = Math.round(travelScore * 40 + effectiveSustainScore * fleetDemandWeight);
 
-                if (score > bestScore) {
+                if (score > bestScore || (score === bestScore && availDemand > (bestResult ? bestResult.effectiveDemand : 0))) {
                     bestScore = score;
                     bestPort = port;
                     bestResult = {
@@ -1070,9 +1091,10 @@
                     result: bestResult
                 });
 
-                // Deduct capacity from demand pool
+                // Deduct full expected consumption (all trips, not just one)
+                // so subsequent vessels see how much demand this vessel will actually use up
                 if (demandCache[bestPort.code]) {
-                    demandCache[bestPort.code][vessel.capacity_type] -= vesselCap;
+                    demandCache[bestPort.code][vessel.capacity_type] -= vesselCap * (bestResult.tripsToday || 1);
                 }
             }
         }
@@ -1415,7 +1437,9 @@
                 updateFooter(cacheAge);
                 return;
             }
-            var assignments = planFleet(idleVessels, cache.ports, speed);
+            var assignments = await planFleet(idleVessels, cache.ports, speed, function(msg) {
+                resultsContainer.innerHTML = '<div style="color:#8899aa;padding:20px;text-align:center;">' + msg + '</div>';
+            });
             lastFleetResults = assignments;
             renderFleetTable(resultsContainer, assignments, speed);
         } else {
@@ -1504,7 +1528,7 @@
         var columns = [
             { key: 'portCode', label: 'Port' },
             { key: 'effectiveDemand', label: 'Eff. Demand' },
-            { key: 'enRouteCapacity', label: 'En Route' },
+            { key: 'enRouteCapacity', label: 'Fleet' },
             { key: 'distance', label: 'Distance' },
             { key: 'travelHours', label: 'Travel' },
             { key: 'tripsToday', label: 'Trips Today' },
@@ -1560,7 +1584,7 @@
             tr.innerHTML = '\
 <td>' + row.portCode + ' <button class="rp-goto-btn" data-lat="' + row.lat + '" data-lon="' + row.lon + '" title="Show on map">&#x1f4cd;</button></td>\
 <td>' + formatNumber(row.effectiveDemand) + unit + '</td>\
-<td>' + (row.enRouteCount > 0 ? row.enRouteCount + ' ships (' + formatNumber(row.enRouteCapacity) + ')' : '-') + '</td>\
+<td>' + (row.enRouteCount > 0 ? '<span style="color:#f59e0b;font-weight:600;">' + row.enRouteCount + ' vessels (' + formatNumber(row.enRouteCapacity) + unit + ')</span>' : '-') + '</td>\
 <td>' + formatNumber(row.distance) + ' nm' + canalBadge + '</td>\
 <td>' + formatHours(row.travelHours) + '</td>\
 <td>' + row.tripsToday + '/' + row.possibleTrips + '</td>\
@@ -1604,7 +1628,14 @@
             var debugBtn = document.createElement('button');
             debugBtn.textContent = 'Show API Debug';
             debugBtn.style.cssText = 'margin:8px;padding:4px 10px;font-size:11px;background:#333;color:#aaa;border:1px solid #555;border-radius:3px;cursor:pointer;';
-            debugBtn.onclick = function() { prompt('Route API response (Ctrl+A):', window._rpRouteDebug); };
+            debugBtn.onclick = function() {
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(window._rpRouteDebug).then(function() { alert('API debug data copied to clipboard.'); });
+                } else {
+                    console.log('[RoutePlanner] API Debug:', window._rpRouteDebug);
+                    alert('API debug data logged to console (F12).');
+                }
+            };
             container.appendChild(debugBtn);
         }
     }
@@ -1651,7 +1682,8 @@
             btn.className = 'rp-send-btn failed';
             btn.textContent = 'Failed';
             _debugLog.push('FAILED: ' + vessel.name + ' → ' + destPortCode + ': ' + (result.error || 'Unknown error'));
-            prompt('Debug log (Ctrl+A to select all):', _debugLog.join(' | '));
+            console.warn('[RoutePlanner] Send failed:', _debugLog.join(' | '));
+            alert('Failed to send ' + vessel.name + ' → ' + destPortCode + '\n' + (result.error || 'Unknown error'));
             // Re-enable after 3s so user can retry
             setTimeout(function() {
                 btn.disabled = false;
@@ -1712,13 +1744,52 @@
         table.innerHTML = '\
 <thead><tr>\
 <th>Vessel</th><th>Type</th><th>Capacity</th><th>From</th><th>To</th>\
-<th>Distance</th><th>Travel</th><th>Trips</th><th>Score</th><th></th>\
+<th>Distance</th><th>Travel</th><th>Trips</th><th>Avail. Demand</th><th>Fleet</th><th>Score</th><th></th>\
 </tr></thead>';
+
+        // For each destination port in this plan, count ALL vessels committed to it:
+        // vessels from this fleet plan + vessels already en-route there
+        var portVesselCount = {};
+        var portVesselCapacity = {};
+        var enRouteByPort = getEnRouteByPort();
+
+        // Build per-port totals for OTHER vessels (en-route + other plan vessels, excluding this row's vessel)
+        // Step 1: seed from en-route vessels (already committed before this plan)
+        for (var j = 0; j < assignments.length; j++) {
+            var aj = assignments[j];
+            var pc = aj.result.portCode;
+            if (portVesselCount[pc] === undefined) {
+                var er = enRouteByPort[pc];
+                if (er) {
+                    portVesselCount[pc] = aj.capacityType === 'container' ? (er.containerCount || 0) : (er.tankerCount || 0);
+                    portVesselCapacity[pc] = aj.capacityType === 'container' ? (er.containerCapacity || 0) : (er.tankerCapacity || 0);
+                } else {
+                    portVesselCount[pc] = 0;
+                    portVesselCapacity[pc] = 0;
+                }
+            }
+        }
+        // Step 2: add plan vessels to each port's total
+        for (var j2 = 0; j2 < assignments.length; j2++) {
+            var aj2 = assignments[j2];
+            portVesselCount[aj2.result.portCode] += 1;
+            portVesselCapacity[aj2.result.portCode] += aj2.vesselCapacity;
+        }
 
         var tbody = document.createElement('tbody');
         for (var i = 0; i < assignments.length; i++) {
             var a = assignments[i];
             var unit = a.capacityType === 'container' ? ' TEU' : ' BBL';
+            // Show OTHER vessels going to this port (exclude this row's vessel)
+            var otherCount = (portVesselCount[a.result.portCode] || 1) - 1;
+            var otherCap = (portVesselCapacity[a.result.portCode] || a.vesselCapacity) - a.vesselCapacity;
+            var sharedLabel;
+            if (otherCount > 0) {
+                var capStr = formatNumber(Math.round(otherCap)) + unit;
+                sharedLabel = '<span style="color:#f59e0b;font-weight:600;">' + otherCount + ' vessels (' + capStr + ')</span>';
+            } else {
+                sharedLabel = '-';
+            }
             var tr = document.createElement('tr');
             tr.innerHTML = '\
 <td>' + a.vesselName + '</td>\
@@ -1729,6 +1800,8 @@
 <td>' + formatNumber(a.result.distance) + ' nm</td>\
 <td>' + formatHours(a.result.travelHours) + '</td>\
 <td>' + a.result.tripsToday + '</td>\
+<td>' + formatNumber(Math.round(a.result.effectiveDemand || 0)) + unit + '</td>\
+<td>' + sharedLabel + '</td>\
 <td>' + renderScoreBar(a.result.score) + '</td>\
 <td></td>';
 
