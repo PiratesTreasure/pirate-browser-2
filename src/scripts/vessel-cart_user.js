@@ -170,6 +170,9 @@
         });
     }
 
+    // Expose addToCart globally for other scripts (e.g. vessel-presets)
+    window._piratestreasureAddToCart = addToCart;
+
     // Remove from cart by key
     function removeFromCart(key) {
         getCart(function(cart) {
@@ -283,6 +286,9 @@
             .sort(function(a, b) { return a.code.localeCompare(b.code); });
         return drydockPortsCache;
     }
+
+    // Expose getDrydockPorts globally for other scripts (e.g. vessel-presets)
+    window._piratestreasureGetDrydockPorts = getDrydockPorts;
 
     // Get anchor points info from stores
     function getAnchorPointsInfo() {
