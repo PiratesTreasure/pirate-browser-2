@@ -634,7 +634,7 @@
             updateSettingsContent();
         };
 
-        document.getElementById('asbst-save').onclick = function() {
+        document.getElementById('asbst-save').onclick = async function() {
             var reserveVal = getNumericValue(document.getElementById('asbst-min-reserve'));
             if (!Number.isInteger(reserveVal) || reserveVal < 0) {
                 reserveVal = 0;
@@ -647,7 +647,15 @@
                 notifySystem: document.getElementById('asbst-notify-system').checked
             };
 
-            saveSettingsToStorage(newSettings);
+            await saveSettingsToStorage(newSettings);
+
+            // Verify the write succeeded by reading back
+            var verification = await dbGet('settings');
+            if (!verification) {
+                console.error(LOG_PREFIX, 'Settings verification failed - write did not persist');
+                notify('Failed to save settings!', 'error');
+                return;
+            }
 
             if (newSettings.enabled) {
                 startMonitoring();

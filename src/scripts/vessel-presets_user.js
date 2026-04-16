@@ -30,7 +30,7 @@
         engine_kw: 60000,
         bulbous: 1,
         enhanced_thrusters: 0,
-        propeller_types: '6_blades',
+        propeller_types: '6_blade_propeller',
         antifouling_model: null,
         range: null,
         ship_yard: '',
@@ -682,15 +682,11 @@
                     '<input id="vpf-propeller" type="text" style="' + inputStyle + '" placeholder="e.g. fixed_pitch" value="' + escapeHtml(String(values.propeller_types)) + '">' +
                 '</div>' +
             '</div>' +
-            // Checkboxes: Bulbous + Enhanced Thrusters
+            // Checkboxes: Bulbous Bow
             '<div style="display:flex;gap:24px;' + fieldStyle + '">' +
                 '<label style="display:flex;align-items:center;gap:6px;color:#9ca3af;font-size:13px;cursor:pointer;">' +
                     '<input id="vpf-bulbous" type="checkbox"' + (values.bulbous ? ' checked' : '') + ' style="accent-color:#f59e0b;width:16px;height:16px;cursor:pointer;">' +
                     'Bulbous Bow' +
-                '</label>' +
-                '<label style="display:flex;align-items:center;gap:6px;color:#9ca3af;font-size:13px;cursor:pointer;">' +
-                    '<input id="vpf-thrusters" type="checkbox"' + (values.enhanced_thrusters ? ' checked' : '') + ' style="accent-color:#f59e0b;width:16px;height:16px;cursor:pointer;">' +
-                    'Enhanced Thrusters' +
                 '</label>' +
             '</div>' +
             // Estimated Price
@@ -767,7 +763,6 @@
         var antifouling = document.getElementById('vpf-antifouling').value.trim();
         var propeller = document.getElementById('vpf-propeller').value.trim();
         var bulbous = document.getElementById('vpf-bulbous').checked ? 1 : 0;
-        var thrusters = document.getElementById('vpf-thrusters').checked ? 1 : 0;
         var price = getNumericValue('vpf-price');
 
         var data = {
@@ -783,7 +778,7 @@
                 antifouling_model: antifouling || null,
                 propeller_types: propeller || null,
                 bulbous: bulbous,
-                enhanced_thrusters: thrusters,
+                enhanced_thrusters: 0,
                 price: price || 0
             }
         };
