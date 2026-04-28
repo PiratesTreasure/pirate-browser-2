@@ -596,6 +596,9 @@ webview.active { display: flex; }
     <button class="nav-btn" onclick="reloadWithScripts()" title="Reload page & inject scripts" style="color:var(--green);border-color:var(--green)">
       <svg width="14" height="14" viewBox="0 0 14 14"><path d="M12 7A5 5 0 112 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M12 3v4h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/></svg>
     </button>
+    <button class="nav-btn" onclick="forceResetWebview()" title="Force reset — destroys & recreates webview (fixes frozen/broken tabs)" style="color:var(--red);border-color:var(--red)">
+      <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1v4M7 9v4M1 7h4M9 7h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
+    </button>
     <div class="toolbar-div"></div>
     <div class="tools-drop" id="tools-drop">
       <button class="toolbar-btn" id="tools-btn" onclick="toggleToolsMenu()">
@@ -871,12 +874,12 @@ function createWebview(id) {
     setTimeout(() => { try { wv.reload(); } catch(e) {} }, 3000);
   });
 
-  // Auto-reload if the webview renderer becomes unresponsive
+  // Auto-recreate if the webview renderer becomes unresponsive
   wv.addEventListener('unresponsive', () => {
-    console.warn('[Webview] Unresponsive — reloading in 10s if not recovered');
+    console.warn('[Webview] Unresponsive — recreating in 10s if not recovered');
     wv._unresponsiveTimer = setTimeout(() => {
-      console.error('[Webview] Still unresponsive — forcing reload');
-      try { wv.reload(); } catch(e) {}
+      console.error('[Webview] Still unresponsive — force recreating');
+      recreateWebview(id);
     }, 10000);
   });
   wv.addEventListener('responsive', () => {
@@ -887,15 +890,37 @@ function createWebview(id) {
     console.log('[Webview] Responsive again');
   });
 
-  // Auto-reload on renderer crash
+  // Auto-recreate on renderer crash
   wv.addEventListener('crashed', () => {
-    console.error('[Webview] Renderer crashed — reloading');
-    try { wv.reload(); } catch(e) {}
+    console.error('[Webview] Renderer crashed — force recreating');
+    recreateWebview(id);
   });
 
   document.getElementById('webview-container').appendChild(wv);
   webviews.set(id, wv);
   return wv;
+}
+
+function recreateWebview(id) {
+  console.log('[Webview] Recreating webview for ' + id);
+  const old = webviews.get(id);
+  if (old) {
+    try { old.stop(); } catch(e) {}
+    old.remove();
+    webviews.delete(id);
+  }
+  webviewReady.set(id, false);
+  const wv = createWebview(id);
+  if (id === activeId) {
+    wv.style.display = 'flex';
+    wv.classList.add('active');
+  }
+  toast('Webview reset — reloading...', 'i');
+}
+
+function forceResetWebview() {
+  if (!activeId) return;
+  recreateWebview(activeId);
 }
 
 function switchToBunker() {

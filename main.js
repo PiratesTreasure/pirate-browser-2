@@ -33,35 +33,51 @@ try {
 }
 
 // ── Constants ─────────────────────────────────────────────────
-const TARGET_URL  = 'https://shippingmanager.cc';
-const SCRIPTS_DIR = path.join(__dirname, 'src', 'scripts');
-const isDev       = process.argv.includes('--dev');
+const TARGET_URL      = 'https://shippingmanager.cc';
+const SCRIPTS_DIR     = path.join(__dirname, 'src', 'scripts');
+const USER_SCRIPTS_DIR = path.join(app.getPath('userData'), 'scripts');
+const isDev           = process.argv.includes('--dev');
+
+// Ensure user scripts directory exists
+if (!fs.existsSync(USER_SCRIPTS_DIR)) fs.mkdirSync(USER_SCRIPTS_DIR, { recursive: true });
 
 // ── Script registry ───────────────────────────────────────────
+function parseScriptEntry(dir, filename) {
+  const src   = fs.readFileSync(path.join(dir, filename), 'utf8');
+  const meta  = {};
+  const block = src.match(/==UserScript==([\s\S]*?)==\/UserScript==/);
+  if (block) {
+    for (const line of block[1].split('\n')) {
+      const m = line.match(/\/\/\s*@(\w[\w-]*)\s+(.*)/);
+      if (m) meta[m[1]] = m[2].trim();
+    }
+  }
+  return {
+    filename,
+    name:        meta.name        || filename.replace('_user.js', ''),
+    description: meta.description || '',
+    version:     meta.version     || '?',
+    order:       parseInt(meta.order || '999', 10),
+    src
+  };
+}
+
 function loadScriptRegistry() {
-  if (!fs.existsSync(SCRIPTS_DIR)) return [];
-  return fs.readdirSync(SCRIPTS_DIR)
-    .filter(f => f.endsWith('.js'))
-    .map(filename => {
-      const src   = fs.readFileSync(path.join(SCRIPTS_DIR, filename), 'utf8');
-      const meta  = {};
-      const block = src.match(/==UserScript==([\s\S]*?)==\/UserScript==/);
-      if (block) {
-        for (const line of block[1].split('\n')) {
-          const m = line.match(/\/\/\s*@(\w[\w-]*)\s+(.*)/);
-          if (m) meta[m[1]] = m[2].trim();
-        }
-      }
-      return {
-        filename,
-        name:        meta.name        || filename.replace('_user.js', ''),
-        description: meta.description || '',
-        version:     meta.version     || '?',
-        order:       parseInt(meta.order || '999', 10),
-        src
-      };
-    })
-    .sort((a, b) => a.order - b.order);
+  const map = new Map();
+
+  // Load bundled scripts first
+  if (fs.existsSync(SCRIPTS_DIR)) {
+    fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.js'))
+      .forEach(f => map.set(f, parseScriptEntry(SCRIPTS_DIR, f)));
+  }
+
+  // User scripts override bundled ones with the same filename
+  if (fs.existsSync(USER_SCRIPTS_DIR)) {
+    fs.readdirSync(USER_SCRIPTS_DIR).filter(f => f.endsWith('.js'))
+      .forEach(f => map.set(f, parseScriptEntry(USER_SCRIPTS_DIR, f)));
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.order - b.order);
 }
 
 let scriptRegistry = loadScriptRegistry();
@@ -212,7 +228,7 @@ ipcMain.handle('scripts:add', async () => {
   if (canceled) return null;
   const added = [];
   for (const src of filePaths) {
-    fs.copyFileSync(src, path.join(SCRIPTS_DIR, path.basename(src)));
+    fs.copyFileSync(src, path.join(USER_SCRIPTS_DIR, path.basename(src)));
     added.push(path.basename(src));
   }
   scriptRegistry = loadScriptRegistry();
@@ -220,14 +236,17 @@ ipcMain.handle('scripts:add', async () => {
 });
 
 ipcMain.handle('scripts:remove', (_e, { filename }) => {
-  const fp = path.join(SCRIPTS_DIR, filename);
-  if (fs.existsSync(fp)) fs.unlinkSync(fp);
+  // Remove from user scripts dir first, then bundled dir
+  const userFp    = path.join(USER_SCRIPTS_DIR, filename);
+  const bundledFp = path.join(SCRIPTS_DIR, filename);
+  if (fs.existsSync(userFp))    fs.unlinkSync(userFp);
+  else if (fs.existsSync(bundledFp)) fs.unlinkSync(bundledFp);
   scriptRegistry = loadScriptRegistry();
   return true;
 });
 
 ipcMain.handle('scripts:open-folder', () => {
-  shell.openPath(SCRIPTS_DIR);
+  shell.openPath(USER_SCRIPTS_DIR);
   return true;
 });
 

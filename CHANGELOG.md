@@ -1,5 +1,13 @@
 # Pirate Browser 2.0 — Changelog
 
+## v2.5.0
+- Auto Speed Boost: Add max cycles limit (stops automatically after N purchases, resets on each enable)
+- Auto Speed Boost: Add time window setting (restrict boosts to specific hours, supports overnight ranges)
+- Port Updates: Fix 30-minute auto-post never firing (background job registration was silently failing); add Post Now button
+- Webview: Add Force Reset button to toolbar — destroys and recreates frozen webviews without restarting the app
+- Webview: Auto-heal on unresponsive/crash now recreates the webview instead of calling reload on a broken WebContents
+- User scripts directory: App now loads scripts from %APPDATA%\Pirate Browser 2.0\scripts\ in addition to bundled scripts — personal scripts placed here survive app updates
+
 ## v2.1.0
 - Added Pirate Analytics dashboard (Fleet Overview, Route Profitability, Transactions, Trends)
 - Added auto-updater with patch notes — updates install automatically

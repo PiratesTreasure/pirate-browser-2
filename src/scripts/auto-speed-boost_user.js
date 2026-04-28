@@ -53,7 +53,11 @@
         enabled: false,
         minPointsReserve: 0,
         notifyIngame: true,
-        notifySystem: false
+        notifySystem: false,
+        maxCycles: 0,
+        timeWindowEnabled: false,
+        timeStart: '08:00',
+        timeEnd: '22:00'
     };
 
     var cachedSettings = null;
@@ -62,6 +66,7 @@
     var monitoringInterval = null;
     var isRunning = false;
     var activeAbortController = null;
+    var cycleCount = 0;
 
     // ============================================
     // PiratesTreasureBridge Storage
@@ -331,6 +336,19 @@
             return { skipped: true, reason: 'disabled' };
         }
 
+        if (!manual && settings.timeWindowEnabled) {
+            var now = new Date();
+            var cur = now.getHours() * 60 + now.getMinutes();
+            var parseMins = function(t) { var p = (t || '00:00').split(':'); return parseInt(p[0]) * 60 + parseInt(p[1]); };
+            var winStart = parseMins(settings.timeStart);
+            var winEnd   = parseMins(settings.timeEnd);
+            var inWindow = winStart <= winEnd ? (cur >= winStart && cur < winEnd) : (cur >= winStart || cur < winEnd);
+            if (!inWindow) {
+                console.log(LOG_PREFIX, 'Outside time window — skipping');
+                return { skipped: true, reason: 'outside_time_window' };
+            }
+        }
+
         isRunning = true;
 
         try {
@@ -370,10 +388,19 @@
 
             if (result && result.data && result.data.success) {
                 var newPoints = result.user ? result.user.points : (points - SPEED_COST);
-                var successMsg = '4x Speed Boost purchased! (' + SPEED_COST + ' points, ' + newPoints + ' remaining)';
+                cycleCount++;
+                var currentSettings = loadSettings();
+                var cycleInfo = currentSettings.maxCycles > 0 ? ' (' + cycleCount + '/' + currentSettings.maxCycles + ' cycles)' : '';
+                var successMsg = '4x Speed Boost purchased!' + cycleInfo + ' (' + SPEED_COST + ' points, ' + newPoints + ' remaining)';
                 console.log(LOG_PREFIX, successMsg);
                 notify(successMsg, 'success');
                 refreshUIAfterPurchase();
+                if (currentSettings.maxCycles > 0 && cycleCount >= currentSettings.maxCycles) {
+                    notify('Cycle limit reached (' + currentSettings.maxCycles + ') — stopping', 'success');
+                    currentSettings.enabled = false;
+                    saveSettingsToStorage(currentSettings);
+                    stopMonitoring();
+                }
                 return { success: true, pointsSpent: SPEED_COST, pointsRemaining: newPoints };
             }
 
@@ -399,6 +426,7 @@
         if (monitoringInterval) {
             clearInterval(monitoringInterval);
         }
+        cycleCount = 0;
         console.log(LOG_PREFIX, 'Monitoring started (' + (CHECK_INTERVAL / 60000) + ' min interval)');
         checkAndBuy();
         monitoringInterval = setInterval(checkAndBuy, CHECK_INTERVAL);
@@ -602,6 +630,38 @@
                     </div>\
                 </div>\
                 <div style="margin-bottom:20px;">\
+                    <label style="display:block;font-weight:700;font-size:14px;margin-bottom:8px;">Max Cycles <span style="font-weight:400;color:#626b90;">(0 = unlimited)</span></label>\
+                    <input type="number" id="asbst-max-cycles" min="0" value="' + (currentSettings.maxCycles || 0) + '"\
+                           style="width:100%;height:2.5rem;padding:0 1rem;background:#ebe9ea;border:0;border-radius:7px;color:#01125d;font-size:16px;font-family:Lato,sans-serif;text-align:center;box-sizing:border-box;">\
+                    <div style="font-size:12px;color:#626b90;margin-top:6px;">\
+                        Stop automatically after this many purchases. Resets each time you enable.\
+                        ' + (monitoringInterval ? '<span style="color:#129c00;font-weight:600;">Purchases this session: ' + cycleCount + '</span>' : '') + '\
+                    </div>\
+                </div>\
+                <div style="margin-bottom:20px;">\
+                    <label style="display:flex;align-items:center;cursor:pointer;font-weight:700;font-size:14px;margin-bottom:10px;">\
+                        <input type="checkbox" id="asbst-time-enabled" ' + (currentSettings.timeWindowEnabled ? 'checked' : '') + '\
+                               style="width:18px;height:18px;margin-right:10px;accent-color:#0db8f4;cursor:pointer;">\
+                        <span>Restrict to time window</span>\
+                    </label>\
+                    <div style="display:flex;align-items:center;gap:12px;" id="asbst-time-fields">\
+                        <div style="flex:1;">\
+                            <div style="font-size:12px;color:#626b90;margin-bottom:4px;">Start</div>\
+                            <input type="time" id="asbst-time-start" value="' + (currentSettings.timeStart || '08:00') + '"\
+                                   style="width:100%;height:2.5rem;padding:0 .75rem;background:#ebe9ea;border:0;border-radius:7px;color:#01125d;font-size:15px;box-sizing:border-box;"\
+                                   ' + (currentSettings.timeWindowEnabled ? '' : 'disabled') + '>\
+                        </div>\
+                        <div style="font-size:14px;color:#626b90;padding-top:18px;">to</div>\
+                        <div style="flex:1;">\
+                            <div style="font-size:12px;color:#626b90;margin-bottom:4px;">End</div>\
+                            <input type="time" id="asbst-time-end" value="' + (currentSettings.timeEnd || '22:00') + '"\
+                                   style="width:100%;height:2.5rem;padding:0 .75rem;background:#ebe9ea;border:0;border-radius:7px;color:#01125d;font-size:15px;box-sizing:border-box;"\
+                                   ' + (currentSettings.timeWindowEnabled ? '' : 'disabled') + '>\
+                        </div>\
+                    </div>\
+                    <div style="font-size:12px;color:#626b90;margin-top:6px;">Only buy during this time range. Supports overnight windows (e.g. 22:00 to 06:00).</div>\
+                </div>\
+                <div style="margin-bottom:20px;">\
                     <div style="font-weight:700;font-size:14px;margin-bottom:12px;color:#01125d;">Notifications</div>\
                     <div style="display:flex;gap:24px;">\
                         <label style="display:flex;align-items:center;cursor:pointer;">\
@@ -625,6 +685,15 @@
         var reserveEl = document.getElementById('asbst-min-reserve');
         if (reserveEl) setupThousandSeparator(reserveEl);
 
+        var timeEnabledEl = document.getElementById('asbst-time-enabled');
+        if (timeEnabledEl) {
+            timeEnabledEl.addEventListener('change', function() {
+                var disabled = !this.checked;
+                document.getElementById('asbst-time-start').disabled = disabled;
+                document.getElementById('asbst-time-end').disabled = disabled;
+            });
+        }
+
         document.getElementById('asbst-run-now').onclick = async function() {
             this.disabled = true;
             this.textContent = 'Running...';
@@ -640,11 +709,18 @@
                 reserveVal = 0;
             }
 
+            var maxCyclesVal = parseInt(document.getElementById('asbst-max-cycles').value, 10);
+            if (isNaN(maxCyclesVal) || maxCyclesVal < 0) maxCyclesVal = 0;
+
             var newSettings = {
                 enabled: document.getElementById('asbst-enabled').checked,
                 minPointsReserve: reserveVal,
                 notifyIngame: document.getElementById('asbst-notify-ingame').checked,
-                notifySystem: document.getElementById('asbst-notify-system').checked
+                notifySystem: document.getElementById('asbst-notify-system').checked,
+                maxCycles: maxCyclesVal,
+                timeWindowEnabled: document.getElementById('asbst-time-enabled').checked,
+                timeStart: document.getElementById('asbst-time-start').value || '08:00',
+                timeEnd: document.getElementById('asbst-time-end').value || '22:00'
             };
 
             await saveSettingsToStorage(newSettings);

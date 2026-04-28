@@ -448,7 +448,23 @@
 
         // Buttons
         var btnRow = document.createElement('div');
-        btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+        btnRow.style.cssText = 'display:flex;gap:8px;justify-content:space-between;align-items:center;';
+
+        var postNowBtn = document.createElement('button');
+        postNowBtn.textContent = 'Post Now';
+        postNowBtn.style.cssText = 'padding:6px 14px;background:#1d4ed8;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;font-weight:bold;';
+        postNowBtn.addEventListener('click', function() {
+            postNowBtn.disabled = true;
+            postNowBtn.textContent = 'Posting...';
+            checkAndAutoPost().then(function() {
+                postNowBtn.textContent = 'Post Now';
+                postNowBtn.disabled = false;
+            });
+        });
+        btnRow.appendChild(postNowBtn);
+
+        var rightBtns = document.createElement('div');
+        rightBtns.style.cssText = 'display:flex;gap:8px;';
 
         var closeBtn = document.createElement('button');
         closeBtn.textContent = 'Close';
@@ -456,7 +472,7 @@
         closeBtn.addEventListener('click', function() {
             closeModal();
         });
-        btnRow.appendChild(closeBtn);
+        rightBtns.appendChild(closeBtn);
 
         var saveBtn = document.createElement('button');
         saveBtn.textContent = 'Save';
@@ -466,7 +482,8 @@
             closeModal();
             log('Settings saved');
         });
-        btnRow.appendChild(saveBtn);
+        rightBtns.appendChild(saveBtn);
+        btnRow.appendChild(rightBtns);
 
         modal.appendChild(btnRow);
         overlay.appendChild(modal);
@@ -516,28 +533,12 @@
         return row;
     }
 
-    // ============================================
-    // BACKGROUND JOB (auto-post check)
-    // ============================================
-    function registerBackgroundJob() {
-        if (!window.PiratesTreasureBridge || !window.PiratesTreasureBridge.registerBackgroundJob) return;
+    var autoPostInterval = null;
 
-        window.PiratesTreasureBridge.registerBackgroundJob({
-            name: SCRIPT_NAME,
-            intervalMinutes: 30,
-            run: async function() {
-                try {
-                    if (!settings) await loadSettings();
-                    await checkAndAutoPost();
-                } catch (e) {
-                    log('Background job error: ' + e.message, 'error');
-                    return { success: false, error: e.message };
-                }
-                return { success: true };
-            }
-        });
-
-        log('Background job registered');
+    function startAutoPostPolling() {
+        if (autoPostInterval) clearInterval(autoPostInterval);
+        autoPostInterval = setInterval(function() { checkAndAutoPost(); }, 30 * 60 * 1000);
+        log('Auto-post polling started (30 min interval)');
     }
 
     // ============================================
@@ -551,7 +552,7 @@
         }
 
         registerPortsCommand();
-        registerBackgroundJob();
+        startAutoPostPolling();
 
         // Check for auto-post on init (delayed to let ChatBot initialize)
         setTimeout(function() {
@@ -568,6 +569,6 @@
             init();
         }
     } else {
-        registerBackgroundJob();
+        startAutoPostPolling();
     }
 })();
