@@ -2,7 +2,7 @@
 // @name         ShippingManager - Route Planner
 // @namespace    https://github.com/PiratesTreasure
 // @description  Plan optimal routes based on demand, travel time, and pirate risk
-// @version      1.0
+// @version      1.1
 // @author       https://github.com/PiratesTreasure
 // @order        15
 // @match        https://shippingmanager.cc/*
@@ -549,6 +549,12 @@
             var createData = await createResp.json();
             _debugLog.push('Create route response: ' + JSON.stringify(createData).substring(0, 300));
             if (!createData.data) {
+                // ship_enroute means the vessel was already dispatched (e.g. by DepartManager
+                // running concurrently) — the route worked, so treat this as success
+                if (createData.error === 'ship_enroute') {
+                    _debugLog.push('ship_enroute: vessel already dispatched, treating as success');
+                    return { success: true };
+                }
                 return { success: false, error: 'Route creation failed: ' + (createData.error || JSON.stringify(createData)) };
             }
 
@@ -1679,23 +1685,31 @@
             btn.textContent = 'Sent!';
             _debugLog.push('SUCCESS: ' + vessel.name + ' departed to ' + destPortCode);
         } else {
+            var errMsg = result.error || 'Unknown error';
             btn.className = 'rp-send-btn failed';
             btn.textContent = 'Failed';
-            _debugLog.push('FAILED: ' + vessel.name + ' → ' + destPortCode + ': ' + (result.error || 'Unknown error'));
+            btn.title = errMsg;
+            _debugLog.push('FAILED: ' + vessel.name + ' → ' + destPortCode + ': ' + errMsg);
             console.warn('[RoutePlanner] Send failed:', _debugLog.join(' | '));
-            alert('Failed to send ' + vessel.name + ' → ' + destPortCode + '\n' + (result.error || 'Unknown error'));
             // Re-enable after 3s so user can retry
             setTimeout(function() {
                 btn.disabled = false;
                 btn.className = 'rp-send-btn';
                 btn.textContent = 'Send';
+                btn.title = '';
             }, 3000);
         }
         } catch(e) {
-            alert('Send error: ' + e.message);
+            console.error('[RoutePlanner] Send error:', e.message);
             btn.disabled = false;
-            btn.className = 'rp-send-btn';
-            btn.textContent = 'Send';
+            btn.className = 'rp-send-btn failed';
+            btn.textContent = 'Failed';
+            btn.title = e.message;
+            setTimeout(function() {
+                btn.className = 'rp-send-btn';
+                btn.textContent = 'Send';
+                btn.title = '';
+            }, 3000);
         }
     }
 

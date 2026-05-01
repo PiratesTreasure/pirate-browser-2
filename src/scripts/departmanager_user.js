@@ -2,7 +2,7 @@
 // @name         ShippingManager - Depart Manager
 // @namespace    https://github.com/PiratesTreasure
 // @description  Unified departure management: Auto bunker rebuy, auto-depart, route settings
-// @version      3.109
+// @version      3.110
 // @author       https://github.com/PiratesTreasure
 // @order        11
 // @match        https://shippingmanager.cc/*
@@ -2753,6 +2753,7 @@
         if (changed) {
             markDirty('drydockVessels');
         }
+        return changed;
     }
 
     // ============================================
@@ -4642,7 +4643,12 @@
                 await handleVesselDataResponse({ data: { user_vessels: vessels } });
 
                 try {
-                    await restoreDrydockVessels(vessels);
+                    var drydockRestored = await restoreDrydockVessels(vessels);
+                    if (drydockRestored) {
+                        // Vessel speeds were updated — flush stale cache so autoDepartVessels
+                        // dispatches with the restored speed, not the pre-restore minimum
+                        cycleCache.vessels = null;
+                    }
                 } catch (e) {
                     log('restoreDrydockVessels error: ' + e.message, 'error');
                 }
