@@ -1,5 +1,8 @@
 # Pirate Browser 2.0 — Changelog
 
+## v2.5.3
+- Fix checksum error for users updating from v2.5.1 (re-release of v2.5.2 with clean artifacts)
+
 ## v2.5.2
 - Depart Manager: Implement CO2 intelligent mode — when price is above basic threshold but within intelligent max, buys only the shortfall needed for departing vessels (mirrors fuel intelligent mode)
 - Depart Manager: Implement Avoid Negative CO2 — pre-depart check skips vessels when bunker CO2 would go negative; intelligent mode adds 100t safety buffer to shortfall calculation
