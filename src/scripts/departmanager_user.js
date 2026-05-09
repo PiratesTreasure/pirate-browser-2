@@ -2906,10 +2906,58 @@
             return { bought: result.success ? amountToBuy : 0, reason: result.success ? 'ok' : result.error };
         }
 
-        // Price > basic threshold - do NOT buy anything proactively
-        // Intelligent mode only kicks in AFTER departures if bunker goes negative
-        log('CO2: Price $' + co2Price + ' > basic threshold $' + settings.co2PriceThreshold + ' - not buying proactively');
-        return { bought: 0, reason: 'price above basic threshold' };
+        // Price > basic threshold - check intelligent mode
+        if (settings.co2Mode !== 'intelligent') {
+            log('CO2: Price $' + co2Price + ' > threshold $' + settings.co2PriceThreshold + ' and intelligent disabled - skipping');
+            return { bought: 0, reason: 'price $' + co2Price + ' > threshold $' + settings.co2PriceThreshold };
+        }
+
+        // Intelligent mode - only buy shortfall with additional conditions
+        if (co2Price > settings.co2IntelligentMaxPrice) {
+            log('CO2 INTEL: Price $' + co2Price + ' > max $' + settings.co2IntelligentMaxPrice + ' - skipping');
+            return { bought: 0, reason: 'price $' + co2Price + ' > max $' + settings.co2IntelligentMaxPrice };
+        }
+
+        // Check optional "bunker below" condition
+        if (settings.co2IntelligentBelowEnabled) {
+            if (currentCO2 >= settings.co2IntelligentBelow) {
+                log('CO2 INTEL: Bunker ' + currentCO2.toFixed(0) + 't >= ' + settings.co2IntelligentBelow + 't - skipping');
+                return { bought: 0, reason: 'bunker ' + currentCO2.toFixed(0) + 't >= ' + settings.co2IntelligentBelow + 't' };
+            }
+        }
+
+        // Get vessels for ships check and CO2 calculation
+        var vessels = await getCachedVesselData();
+        if (!vessels) {
+            log('CO2 INTEL: Could not fetch vessels - skipping');
+            return { bought: 0, reason: 'no vessel data' };
+        }
+
+        // Check optional "min ships at port" condition
+        if (settings.co2IntelligentShipsEnabled) {
+            var shipsAtPort = vessels.filter(function(v) { return v.status === 'port'; }).length;
+            if (shipsAtPort < settings.co2IntelligentShips) {
+                log('CO2 INTEL: ' + shipsAtPort + ' ships < required ' + settings.co2IntelligentShips + ' - skipping');
+                return { bought: 0, reason: shipsAtPort + ' ships < required ' + settings.co2IntelligentShips };
+            }
+        }
+
+        // Fill bunker (same as basic mode — intelligent mode is a smarter price ceiling,
+        // not a shortfall calculation; CO2 can go negative so shortfall-based triggers rarely fire)
+        if (co2Space < 1) {
+            log('CO2 INTEL: Price acceptable but bunker full');
+            return { bought: 0, reason: 'tank full' };
+        }
+
+        var amountToBuyInt = Math.min(Math.ceil(co2Space), maxAffordable);
+        if (amountToBuyInt <= 0) {
+            log('CO2 INTEL: Cannot buy - insufficient funds or space');
+            return { bought: 0, reason: 'insufficient cash or space' };
+        }
+
+        log('CO2 INTEL: Filling bunker with ' + amountToBuyInt + 't @ $' + co2Price);
+        var resultInt = await purchaseCO2API(amountToBuyInt, co2Price);
+        return { bought: resultInt.success ? amountToBuyInt : 0, reason: resultInt.success ? 'ok' : resultInt.error };
     }
 
     // ============================================
@@ -3080,6 +3128,13 @@
                     var fuelMsg = vessel.name + ': not_enough_fuel (' + bunker.fuel.toFixed(0) + 't < ' + fuelNeeded.toFixed(0) + 't) - will buy after departures';
                     log(fuelMsg);
                     skipped.push(fuelMsg);
+                    continue;
+                }
+
+                if (settings.avoidNegativeCO2 && settings.co2Mode !== 'off' && co2Needed > 0 && bunker.co2 < co2Needed) {
+                    var co2Msg = vessel.name + ': not_enough_co2 (' + bunker.co2.toFixed(0) + 't < ' + co2Needed.toFixed(0) + 't) - will buy after departures';
+                    log(co2Msg);
+                    skipped.push(co2Msg);
                     continue;
                 }
 

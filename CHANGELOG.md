@@ -1,5 +1,10 @@
 # Pirate Browser 2.0 — Changelog
 
+## v2.5.2
+- Depart Manager: Implement CO2 intelligent mode — when price is above basic threshold but within intelligent max, buys only the shortfall needed for departing vessels (mirrors fuel intelligent mode)
+- Depart Manager: Implement Avoid Negative CO2 — pre-depart check skips vessels when bunker CO2 would go negative; intelligent mode adds 100t safety buffer to shortfall calculation
+- Webview: Fix script double-injection bug — page navigations during the 1500ms startup delay could cause all scripts to run twice (doubled intervals, doubled API polling); replaced boolean guard with a per-load token so any stale injection self-cancels the moment a new load begins
+
 ## v2.5.0
 - Auto Speed Boost: Add max cycles limit (stops automatically after N purchases, resets on each enable)
 - Auto Speed Boost: Add time window setting (restrict boosts to specific hours, supports overnight ranges)
