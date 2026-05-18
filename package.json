@@ -1,6 +1,6 @@
 {
   "name": "pirate-browser-2",
-  "version": "2.5.3",
+  "version": "2.5.4",
   "description": "Pirate Browser 2.0 \u2014 Multi-account ShippingManager automation suite",
   "main": "main.js",
   "scripts": {
@@ -69,6 +69,12 @@
     ],
     "asarUnpack": [
       "src/scripts/**"
+    ],
+    "extraFiles": [
+      {
+        "from": "node_modules/electron/dist/ffmpeg.dll",
+        "to": "ffmpeg.dll"
+      }
     ],
     "publish": {
       "provider": "github",
