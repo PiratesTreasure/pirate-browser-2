@@ -1,5 +1,8 @@
 # Pirate Browser 2.0 — Changelog
 
+## v2.6.1
+- Auto Speed Boost: Bunker window card now displays times in the PC's local timezone instead of GMT — window start/end, current time, timeline labels and slot tooltips all use local time; internal window-matching logic remains UTC
+
 ## v2.6.0
 - Auto Speed Boost: Smart Bunker Window — analyses Pirate Bunker price data to find the cheapest 4-hour fuel+CO2 window each day (UTC), only activates speed boost during that window; updates automatically each day
 - Auto Speed Boost: Bunker window visual card in settings — shows a 24h timeline bar with best window highlighted green and current slot in blue, live status (ACTIVE/WAITING) with countdown, window average fuel/CO2 prices

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ShippingManager - Auto Speed Boost
 // @namespace    https://github.com/PiratesTreasure
-// @version      1.8
+// @version      1.9
 // @description  Automatically buys 4x Speed Boost from the shop when timer expires
 // @author       https://github.com/PiratesTreasure
 // @order        8
@@ -239,6 +239,26 @@
     }
 
     function padTwo(n) { return n < 10 ? '0' + n : String(n); }
+
+    // Convert a "HH:MM" UTC string to the PC's local time string
+    function gmtTimeToLocal(timeStr) {
+        var p = timeStr.split(':');
+        var now = new Date();
+        var d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), parseInt(p[0]), parseInt(p[1]), 0));
+        return padTwo(d.getHours()) + ':' + padTwo(d.getMinutes());
+    }
+
+    // Get the local timezone label, e.g. "GMT+1" or "BST"
+    function getLocalTzLabel() {
+        try {
+            var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            var offset = -new Date().getTimezoneOffset();
+            var sign = offset >= 0 ? '+' : '-';
+            var h = Math.floor(Math.abs(offset) / 60);
+            var m = Math.abs(offset) % 60;
+            return 'GMT' + sign + h + (m ? ':' + padTwo(m) : '');
+        } catch(e) { return 'Local'; }
+    }
 
     function slotToMinutes(timeStr) {
         var p = timeStr.split(':');
@@ -767,8 +787,18 @@
 
             var inWindow = isCurrentlyInWindow(win);
             var slot = getCurrentGmtSlot();
+            var tzLabel = getLocalTzLabel();
 
-            // Timeline: 48 slots, mark the 8 best ones and current slot
+            // Convert window start/end to local time for display
+            var localWinStart = gmtTimeToLocal(win.start);
+            var localWinEnd   = gmtTimeToLocal(win.end);
+
+            // Local time label markers for the timeline (every 6 hours of UTC)
+            var tlLabels = ['00:00','06:00','12:00','18:00','24:00'].map(function(t) {
+                return t === '24:00' ? gmtTimeToLocal('00:00') : gmtTimeToLocal(t);
+            });
+
+            // Timeline: 48 UTC slots, mark the 8 best ones and current slot
             var winStartMins = slotToMinutes(win.start);
             var winEndMins = slotToMinutes(win.end);
 
@@ -780,11 +810,13 @@
                     var isCur = (padTwo(h) + ':' + padTwo(half * 30)) === slot.startStr;
                     var bg = isCur ? '#0db8f4' : (isWin ? '#129c00' : '#d0d0d0');
                     var height = isWin || isCur ? '14px' : '8px';
-                    timelineHtml += '<div style="flex:1;height:' + height + ';background:' + bg + ';border-radius:1px;align-self:flex-end;' + (isCur ? 'box-shadow:0 0 4px #0db8f4;' : '') + '" title="' + padTwo(h) + ':' + padTwo(half * 30) + '"></div>';
+                    // Show local time in tooltip
+                    var localSlotLabel = gmtTimeToLocal(padTwo(h) + ':' + padTwo(half * 30));
+                    timelineHtml += '<div style="flex:1;height:' + height + ';background:' + bg + ';border-radius:1px;align-self:flex-end;' + (isCur ? 'box-shadow:0 0 4px #0db8f4;' : '') + '" title="' + localSlotLabel + ' (' + tzLabel + ')"></div>';
                 }
             }
             timelineHtml += '</div>';
-            timelineHtml += '<div style="display:flex;justify-content:space-between;font-size:10px;color:#626b90;"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>';
+            timelineHtml += '<div style="display:flex;justify-content:space-between;font-size:10px;color:#626b90;"><span>' + tlLabels[0] + '</span><span>' + tlLabels[1] + '</span><span>' + tlLabels[2] + '</span><span>' + tlLabels[3] + '</span><span>' + tlLabels[4] + '</span></div>';
 
             var statusColor = inWindow ? '#129c00' : '#e8912a';
             var statusText, statusSub;
@@ -798,11 +830,15 @@
                 statusSub = 'Window starts in ' + formatDuration(msUntil);
             }
 
+            // Current local time display
+            var nowLocal = new Date();
+            var nowLocalStr = padTwo(nowLocal.getHours()) + ':' + padTwo(nowLocal.getMinutes());
+
             cardEl.innerHTML =
                 '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
                     '<div>' +
-                        '<div style="font-weight:700;font-size:13px;color:#01125d;">🏴‍☠️ Best 4-Hour Window (GMT)</div>' +
-                        '<div style="font-size:15px;font-weight:800;color:#01125d;letter-spacing:0.5px;">' + win.start + ' – ' + win.end + '</div>' +
+                        '<div style="font-weight:700;font-size:13px;color:#01125d;">🏴‍☠️ Best 4-Hour Window (' + tzLabel + ')</div>' +
+                        '<div style="font-size:15px;font-weight:800;color:#01125d;letter-spacing:0.5px;">' + localWinStart + ' – ' + localWinEnd + '</div>' +
                     '</div>' +
                     '<div style="text-align:right;">' +
                         '<div style="font-weight:800;font-size:14px;color:' + statusColor + ';">' + statusText + '</div>' +
@@ -813,7 +849,7 @@
                 '<div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;">' +
                     '<div style="font-size:12px;color:#626b90;">Window avg fuel: <strong style="color:#01125d;">$' + win.avgFuel + '/t</strong></div>' +
                     '<div style="font-size:12px;color:#626b90;">Window avg CO₂: <strong style="color:#01125d;">$' + win.avgCo2 + '/t</strong></div>' +
-                    '<div style="font-size:12px;color:#626b90;margin-left:auto;">Now: <strong style="color:#0db8f4;">' + slot.startStr + ' GMT</strong></div>' +
+                    '<div style="font-size:12px;color:#626b90;margin-left:auto;">Now: <strong style="color:#0db8f4;">' + nowLocalStr + ' ' + tzLabel + '</strong></div>' +
                 '</div>' +
                 '<div style="font-size:10px;color:#aaa;margin-top:4px;">🟢 = best 4h window &nbsp; 🔵 = current slot &nbsp; ▬ = other slots</div>';
 
@@ -1047,7 +1083,7 @@
     }
 
     async function init() {
-        console.log(LOG_PREFIX, 'Initializing v1.8...');
+        console.log(LOG_PREFIX, 'Initializing v1.9...');
 
         addMenuItem('Auto Speed Boost', openSettingsModal, 25);
         initUI();
