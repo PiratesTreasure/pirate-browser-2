@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ShippingManager - Auto Speed Boost
 // @namespace    https://github.com/PiratesTreasure
-// @version      1.5
+// @version      1.8
 // @description  Automatically buys 4x Speed Boost from the shop when timer expires
 // @author       https://github.com/PiratesTreasure
 // @order        8
@@ -57,7 +57,8 @@
         maxCycles: 0,
         timeWindowEnabled: false,
         timeStart: '08:00',
-        timeEnd: '22:00'
+        timeEnd: '22:00',
+        bunkerFilterEnabled: false,
     };
 
     var cachedSettings = null;
@@ -67,6 +68,8 @@
     var isRunning = false;
     var activeAbortController = null;
     var cycleCount = 0;
+    var bunkerDataCache = null;       // { data: [...], fetchedAt: timestamp }
+    var bestWindowCache = null;       // { day: N, window: {...} } — recalculated each UTC day
 
     // ============================================
     // PiratesTreasureBridge Storage
@@ -196,6 +199,167 @@
             method: 'POST',
             body: JSON.stringify({ sku: SPEED_SKU })
         });
+    }
+
+    // ============================================
+    // Bunker Price Analysis — Best 4-Hour Window
+    // ============================================
+
+    var BUNKER_DATA_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days — static historical data
+    var BUNKER_PAGE_URL = 'https://piratebunker.netlify.app/';
+    var WINDOW_SLOTS = 8; // 8 × 30 min = 4 hours
+
+    async function fetchBunkerData() {
+        if (bunkerDataCache && (Date.now() - bunkerDataCache.fetchedAt) < BUNKER_DATA_TTL) {
+            return bunkerDataCache.data;
+        }
+        try {
+            var stored = await dbGet('bunkerData');
+            if (stored && stored.fetchedAt && (Date.now() - stored.fetchedAt) < BUNKER_DATA_TTL && Array.isArray(stored.data)) {
+                bunkerDataCache = stored;
+                return stored.data;
+            }
+        } catch (e) { /* ignore */ }
+
+        try {
+            var resp = await fetch(BUNKER_PAGE_URL);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var html = await resp.text();
+            var match = html.match(/const\s+DATA\s*=\s*(\[[\s\S]*?\]);/);
+            if (!match) throw new Error('DATA not found in page');
+            var data = JSON.parse(match[1]);
+            bunkerDataCache = { data: data, fetchedAt: Date.now() };
+            await dbSet('bunkerData', bunkerDataCache);
+            console.log(LOG_PREFIX, 'Bunker data loaded: ' + data.length + ' days');
+            return data;
+        } catch (e) {
+            console.error(LOG_PREFIX, 'Failed to fetch bunker data:', e.message);
+            return null;
+        }
+    }
+
+    function padTwo(n) { return n < 10 ? '0' + n : String(n); }
+
+    function slotToMinutes(timeStr) {
+        var p = timeStr.split(':');
+        return parseInt(p[0]) * 60 + parseInt(p[1]);
+    }
+
+    function getCurrentGmtSlot() {
+        var now = new Date();
+        var day = now.getUTCDate();
+        var hour = now.getUTCHours();
+        var minute = now.getUTCMinutes();
+        var slotMinutes = minute < 30 ? 0 : 30;
+        var startStr = padTwo(hour) + ':' + padTwo(slotMinutes);
+        return { day: day, startStr: startStr };
+    }
+
+    // Find the cheapest 4-hour window for a given day (lowest total fuel+CO2 across 8 consecutive slots)
+    function findBestFourHourWindow(data, day) {
+        if (!data) return null;
+        var dayData = data.find(function(d) { return d.day === day; });
+        if (!dayData || !dayData.intervals || dayData.intervals.length < WINDOW_SLOTS) return null;
+
+        var intervals = dayData.intervals;
+        var bestScore = Infinity;
+        var bestStart = 0;
+
+        for (var i = 0; i <= intervals.length - WINDOW_SLOTS; i++) {
+            var score = 0;
+            for (var j = 0; j < WINDOW_SLOTS; j++) {
+                score += intervals[i + j].fuel + intervals[i + j].co2;
+            }
+            if (score < bestScore) {
+                bestScore = score;
+                bestStart = i;
+            }
+        }
+
+        var slots = intervals.slice(bestStart, bestStart + WINDOW_SLOTS);
+        var totalFuel = 0, totalCo2 = 0;
+        for (var k = 0; k < slots.length; k++) { totalFuel += slots[k].fuel; totalCo2 += slots[k].co2; }
+
+        return {
+            start: slots[0].start,
+            end: slots[WINDOW_SLOTS - 1].end,
+            avgFuel: Math.round(totalFuel / WINDOW_SLOTS),
+            avgCo2: Math.round(totalCo2 / WINDOW_SLOTS),
+            score: bestScore,
+            slots: slots
+        };
+    }
+
+    // Get (and cache) today's best window — recalculate when the UTC day changes
+    async function getTodaysBestWindow() {
+        var data = await fetchBunkerData();
+        if (!data) return null;
+        var day = new Date().getUTCDate();
+        if (!bestWindowCache || bestWindowCache.day !== day) {
+            var win = findBestFourHourWindow(data, day);
+            bestWindowCache = { day: day, window: win };
+            if (win) console.log(LOG_PREFIX, 'Best 4h window (day ' + day + '): ' + win.start + '–' + win.end + ' GMT | avg fuel $' + win.avgFuel + ' co2 $' + win.avgCo2);
+        }
+        return bestWindowCache.window;
+    }
+
+    function isCurrentlyInWindow(win) {
+        if (!win) return false;
+        var slot = getCurrentGmtSlot();
+        var cur = slotToMinutes(slot.startStr);
+        var wStart = slotToMinutes(win.start);
+        var wEnd = slotToMinutes(win.end);
+        return cur >= wStart && cur < wEnd;
+    }
+
+    function msUntilWindowStart(win) {
+        if (!win) return null;
+        var now = new Date();
+        var curMins = now.getUTCHours() * 60 + now.getUTCMinutes();
+        var wStartMins = slotToMinutes(win.start);
+        var diffMins = wStartMins - curMins;
+        if (diffMins < 0) diffMins += 24 * 60; // window is tomorrow
+        return diffMins * 60 * 1000 - now.getUTCSeconds() * 1000;
+    }
+
+    function msUntilWindowEnd(win) {
+        if (!win) return null;
+        var now = new Date();
+        var curMins = now.getUTCHours() * 60 + now.getUTCMinutes();
+        var wEndMins = slotToMinutes(win.end);
+        var diffMins = wEndMins - curMins;
+        if (diffMins <= 0) return 0;
+        return diffMins * 60 * 1000 - now.getUTCSeconds() * 1000;
+    }
+
+    function formatDuration(ms) {
+        if (ms <= 0) return '0m';
+        var totalMins = Math.floor(ms / 60000);
+        var h = Math.floor(totalMins / 60);
+        var m = totalMins % 60;
+        return h > 0 ? h + 'h ' + m + 'm' : m + 'm';
+    }
+
+    async function checkBunkerWindow() {
+        var settings = loadSettings();
+        if (!settings.bunkerFilterEnabled) return { pass: true };
+
+        var win = await getTodaysBestWindow();
+        if (!win) {
+            console.log(LOG_PREFIX, 'Bunker data unavailable — skipping bunker check');
+            return { pass: true }; // fail open
+        }
+
+        var inWindow = isCurrentlyInWindow(win);
+        if (!inWindow) {
+            var msUntil = msUntilWindowStart(win);
+            console.log(LOG_PREFIX, 'Outside best bunker window (' + win.start + '–' + win.end + ' GMT) — starts in ' + formatDuration(msUntil));
+            return { pass: false, window: win, msUntilStart: msUntil };
+        }
+
+        var msLeft = msUntilWindowEnd(win);
+        console.log(LOG_PREFIX, 'Inside best bunker window (' + win.start + '–' + win.end + ' GMT) — ' + formatDuration(msLeft) + ' remaining');
+        return { pass: true, window: win, msUntilEnd: msLeft };
     }
 
     // ============================================
@@ -346,6 +510,13 @@
             if (!inWindow) {
                 console.log(LOG_PREFIX, 'Outside time window — skipping');
                 return { skipped: true, reason: 'outside_time_window' };
+            }
+        }
+
+        if (!manual) {
+            var bunkerCheck = await checkBunkerWindow();
+            if (!bunkerCheck.pass) {
+                return { skipped: true, reason: 'outside_bunker_window', window: bunkerCheck.window, msUntilStart: bunkerCheck.msUntilStart };
             }
         }
 
@@ -582,6 +753,75 @@
         updateSettingsContent();
     }
 
+    function loadBunkerStatusForModal() {
+        var cardEl = document.getElementById('asbst-bunker-card');
+        if (!cardEl) return;
+        cardEl.innerHTML = '<div style="color:#626b90;font-size:12px;">Loading Pirate Bunker data...</div>';
+
+        getTodaysBestWindow().then(function(win) {
+            if (!cardEl) return;
+            if (!win) {
+                cardEl.innerHTML = '<div style="color:#e53e3e;font-size:12px;">⚠ Could not load Pirate Bunker data.</div>';
+                return;
+            }
+
+            var inWindow = isCurrentlyInWindow(win);
+            var slot = getCurrentGmtSlot();
+
+            // Timeline: 48 slots, mark the 8 best ones and current slot
+            var winStartMins = slotToMinutes(win.start);
+            var winEndMins = slotToMinutes(win.end);
+
+            var timelineHtml = '<div style="display:flex;gap:1px;margin:8px 0 4px;">';
+            for (var h = 0; h < 24; h++) {
+                for (var half = 0; half < 2; half++) {
+                    var mins = h * 60 + half * 30;
+                    var isWin = mins >= winStartMins && mins < winEndMins;
+                    var isCur = (padTwo(h) + ':' + padTwo(half * 30)) === slot.startStr;
+                    var bg = isCur ? '#0db8f4' : (isWin ? '#129c00' : '#d0d0d0');
+                    var height = isWin || isCur ? '14px' : '8px';
+                    timelineHtml += '<div style="flex:1;height:' + height + ';background:' + bg + ';border-radius:1px;align-self:flex-end;' + (isCur ? 'box-shadow:0 0 4px #0db8f4;' : '') + '" title="' + padTwo(h) + ':' + padTwo(half * 30) + '"></div>';
+                }
+            }
+            timelineHtml += '</div>';
+            timelineHtml += '<div style="display:flex;justify-content:space-between;font-size:10px;color:#626b90;"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>';
+
+            var statusColor = inWindow ? '#129c00' : '#e8912a';
+            var statusText, statusSub;
+            if (inWindow) {
+                var msLeft = msUntilWindowEnd(win);
+                statusText = '▶ ACTIVE';
+                statusSub = 'Window ends in ' + formatDuration(msLeft);
+            } else {
+                var msUntil = msUntilWindowStart(win);
+                statusText = '⏳ WAITING';
+                statusSub = 'Window starts in ' + formatDuration(msUntil);
+            }
+
+            cardEl.innerHTML =
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+                    '<div>' +
+                        '<div style="font-weight:700;font-size:13px;color:#01125d;">🏴‍☠️ Best 4-Hour Window (GMT)</div>' +
+                        '<div style="font-size:15px;font-weight:800;color:#01125d;letter-spacing:0.5px;">' + win.start + ' – ' + win.end + '</div>' +
+                    '</div>' +
+                    '<div style="text-align:right;">' +
+                        '<div style="font-weight:800;font-size:14px;color:' + statusColor + ';">' + statusText + '</div>' +
+                        '<div style="font-size:11px;color:#626b90;">' + statusSub + '</div>' +
+                    '</div>' +
+                '</div>' +
+                timelineHtml +
+                '<div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;">' +
+                    '<div style="font-size:12px;color:#626b90;">Window avg fuel: <strong style="color:#01125d;">$' + win.avgFuel + '/t</strong></div>' +
+                    '<div style="font-size:12px;color:#626b90;">Window avg CO₂: <strong style="color:#01125d;">$' + win.avgCo2 + '/t</strong></div>' +
+                    '<div style="font-size:12px;color:#626b90;margin-left:auto;">Now: <strong style="color:#0db8f4;">' + slot.startStr + ' GMT</strong></div>' +
+                '</div>' +
+                '<div style="font-size:10px;color:#aaa;margin-top:4px;">🟢 = best 4h window &nbsp; 🔵 = current slot &nbsp; ▬ = other slots</div>';
+
+        }).catch(function() {
+            if (cardEl) cardEl.innerHTML = '<div style="color:#e53e3e;font-size:12px;">Error loading Pirate Bunker data.</div>';
+        });
+    }
+
     function updateSettingsContent() {
         var settingsContent = document.getElementById('asbst-settings-content');
         if (!settingsContent) return;
@@ -662,6 +902,17 @@
                     <div style="font-size:12px;color:#626b90;margin-top:6px;">Only buy during this time range. Supports overnight windows (e.g. 22:00 to 06:00).</div>\
                 </div>\
                 <div style="margin-bottom:20px;">\
+                    <label style="display:flex;align-items:center;cursor:pointer;font-weight:700;font-size:14px;margin-bottom:10px;">\
+                        <input type="checkbox" id="asbst-bunker-enabled" ' + (currentSettings.bunkerFilterEnabled ? 'checked' : '') + '\
+                               style="width:18px;height:18px;margin-right:10px;accent-color:#0db8f4;cursor:pointer;">\
+                        <span>Smart Bunker Window <span style="font-weight:400;color:#626b90;font-size:12px;">(only boost during cheapest 4h today)</span></span>\
+                    </label>\
+                    <div id="asbst-bunker-card" style="padding:12px;background:#f0f4f8;border-radius:8px;' + (currentSettings.bunkerFilterEnabled ? '' : 'display:none;') + '">\
+                        <div style="color:#626b90;font-size:12px;">Enable the toggle above to load the best window.</div>\
+                    </div>\
+                    <button id="asbst-bunker-refresh" style="display:' + (currentSettings.bunkerFilterEnabled ? 'inline-block' : 'none') + ';margin-top:6px;padding:4px 12px;background:none;border:1px solid #0db8f4;border-radius:5px;color:#0db8f4;cursor:pointer;font-size:12px;">↻ Refresh</button>\
+                </div>\
+                <div style="margin-bottom:20px;">\
                     <div style="font-weight:700;font-size:14px;margin-bottom:12px;color:#01125d;">Notifications</div>\
                     <div style="display:flex;gap:24px;">\
                         <label style="display:flex;align-items:center;cursor:pointer;">\
@@ -694,6 +945,31 @@
             });
         }
 
+        var bunkerEnabledEl = document.getElementById('asbst-bunker-enabled');
+        var bunkerCardEl = document.getElementById('asbst-bunker-card');
+        var bunkerRefreshBtn = document.getElementById('asbst-bunker-refresh');
+        if (bunkerEnabledEl && bunkerCardEl) {
+            bunkerEnabledEl.addEventListener('change', function() {
+                if (this.checked) {
+                    bunkerCardEl.style.display = '';
+                    if (bunkerRefreshBtn) bunkerRefreshBtn.style.display = 'inline-block';
+                    loadBunkerStatusForModal();
+                } else {
+                    bunkerCardEl.style.display = 'none';
+                    if (bunkerRefreshBtn) bunkerRefreshBtn.style.display = 'none';
+                }
+            });
+        }
+        if (bunkerRefreshBtn) {
+            bunkerRefreshBtn.onclick = function() {
+                loadBunkerStatusForModal();
+            };
+        }
+
+        if (currentSettings.bunkerFilterEnabled) {
+            loadBunkerStatusForModal();
+        }
+
         document.getElementById('asbst-run-now').onclick = async function() {
             this.disabled = true;
             this.textContent = 'Running...';
@@ -720,7 +996,8 @@
                 maxCycles: maxCyclesVal,
                 timeWindowEnabled: document.getElementById('asbst-time-enabled').checked,
                 timeStart: document.getElementById('asbst-time-start').value || '08:00',
-                timeEnd: document.getElementById('asbst-time-end').value || '22:00'
+                timeEnd: document.getElementById('asbst-time-end').value || '22:00',
+                bunkerFilterEnabled: document.getElementById('asbst-bunker-enabled').checked
             };
 
             await saveSettingsToStorage(newSettings);
@@ -770,7 +1047,7 @@
     }
 
     async function init() {
-        console.log(LOG_PREFIX, 'Initializing v1.4...');
+        console.log(LOG_PREFIX, 'Initializing v1.8...');
 
         addMenuItem('Auto Speed Boost', openSettingsModal, 25);
         initUI();

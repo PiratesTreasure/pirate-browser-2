@@ -1,5 +1,12 @@
 # Pirate Browser 2.0 — Changelog
 
+## v2.6.0
+- Auto Speed Boost: Smart Bunker Window — analyses Pirate Bunker price data to find the cheapest 4-hour fuel+CO2 window each day (UTC), only activates speed boost during that window; updates automatically each day
+- Auto Speed Boost: Bunker window visual card in settings — shows a 24h timeline bar with best window highlighted green and current slot in blue, live status (ACTIVE/WAITING) with countdown, window average fuel/CO2 prices
+- Auto Speed Boost: Refresh button on bunker card to reload live status without reopening the modal
+- Webview: CSP headers from ShippingManager stripped at session level so injected scripts can fetch external resources (e.g. Pirate Bunker data)
+- Webview: Auto force-reset every 2 hours per tab to prevent game freezing/bugging out; tabs staggered 5 minutes apart
+
 ## v2.5.3
 - Fix checksum error for users updating from v2.5.1 (re-release of v2.5.2 with clean artifacts)
 

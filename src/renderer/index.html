@@ -736,6 +736,7 @@ async function init() {
   }
 
   setTimeout(() => setStatus(true), 1500);
+  initAutoResets();
 
   // Wake up all active webviews when system resumes from sleep or screen unlock
   if (window.pirate.system) {
@@ -921,6 +922,33 @@ function forceResetWebview() {
   if (!activeId) return;
   recreateWebview(activeId);
 }
+
+// ── Auto force-reset every 2 hours per tab ───────────────────
+// Prevents the game from freezing/bugging out over long sessions.
+// Tabs are staggered 5 minutes apart so they don't all reset at once.
+var AUTO_RESET_INTERVAL = 2 * 60 * 60 * 1000; // 2 hours
+var AUTO_RESET_STAGGER  = 5 * 60 * 1000;       // 5 minutes between tabs
+
+function scheduleAutoReset(id, delayMs) {
+  setTimeout(function() {
+    console.log('[AutoReset] Scheduled force-reset for tab ' + id);
+    recreateWebview(id);
+    // Schedule the next reset for this tab in 2 hours
+    scheduleAutoReset(id, AUTO_RESET_INTERVAL);
+  }, delayMs);
+}
+
+function initAutoResets() {
+  var i = 0;
+  webviews.forEach(function(_wv, id) {
+    // First reset: 2 hours + stagger offset so tabs don't all reset together
+    var firstDelay = AUTO_RESET_INTERVAL + (i * AUTO_RESET_STAGGER);
+    console.log('[AutoReset] Tab ' + id + ' will first reset in ' + Math.round(firstDelay / 60000) + ' min');
+    scheduleAutoReset(id, firstDelay);
+    i++;
+  });
+}
+
 
 function switchToBunker() {
   // Hide all account webviews

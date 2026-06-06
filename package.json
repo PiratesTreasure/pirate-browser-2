@@ -1,7 +1,7 @@
 {
   "name": "pirate-browser-2",
-  "version": "2.5.4",
-  "description": "Pirate Browser 2.0 \u2014 Multi-account ShippingManager automation suite",
+  "version": "2.6.0",
+  "description": "Pirate Browser 2.0 — Multi-account ShippingManager automation suite",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -30,7 +30,7 @@
     "appId": "org.piratestreaure.pirate-browser",
     "productName": "Pirate Browser 2.0",
     "artifactName": "Pirate-Browser-2.0-Setup-${version}.${ext}",
-    "copyright": "Copyright \u00a9 2026 PiratesTreasure",
+    "copyright": "Copyright © 2026 PiratesTreasure",
     "directories": {
       "buildResources": "public",
       "output": "dist"

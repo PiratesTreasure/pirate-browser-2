@@ -298,9 +298,26 @@ ipcMain.on('accounts:setup-partition', (_e, { partition }) => {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
     'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
   );
-  // CSP removed — ShippingManager loads resources from multiple CDNs
-  // that would need extensive allowlisting. Partition isolation provides
-  // the security boundary instead.
+
+  // Strip CSP from ShippingManager responses so injected scripts can make
+  // cross-origin requests (e.g. fetching piratebunker.netlify.app data).
+  // Also inject permissive CORS headers on piratebunker responses so the
+  // fetch response body is readable from the ShippingManager webview context.
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    const headers = Object.assign({}, details.responseHeaders);
+
+    // Remove CSP — partition isolation is the security boundary here
+    delete headers['content-security-policy'];
+    delete headers['Content-Security-Policy'];
+
+    // Allow scripts to read piratebunker responses cross-origin
+    if (details.url.startsWith('https://piratebunker.netlify.app')) {
+      headers['access-control-allow-origin']  = ['*'];
+      headers['access-control-allow-methods'] = ['GET'];
+    }
+
+    callback({ responseHeaders: headers });
+  });
 });
 
 // ── Open external links in system browser ────────────────────
