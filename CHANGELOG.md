@@ -1,5 +1,8 @@
 # Pirate Browser 2.0 — Changelog
 
+## v2.6.2
+- Auto Postpone Drydock: New script — automatically postpones drydock every 7 days via direct API call (no shop tab required); costs 1,200 points per run; Run Now button for manual/test use
+
 ## v2.6.1
 - Auto Speed Boost: Bunker window card now displays times in the PC's local timezone instead of GMT — window start/end, current time, timeline labels and slot tooltips all use local time; internal window-matching logic remains UTC
 

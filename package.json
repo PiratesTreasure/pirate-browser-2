@@ -1,6 +1,6 @@
 {
   "name": "pirate-browser-2",
-  "version": "2.6.1",
+  "version": "2.6.2",
   "description": "Pirate Browser 2.0 — Multi-account ShippingManager automation suite",
   "main": "main.js",
   "scripts": {
