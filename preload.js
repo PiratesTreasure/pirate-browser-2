@@ -59,5 +59,6 @@ contextBridge.exposeInMainWorld('pirate', {
   system: {
     on:  (event, cb) => ipcRenderer.on(event,  (_e, data) => cb(data)),
     off: (event, cb) => ipcRenderer.off(event, cb),
-  }
+  },
+
 });

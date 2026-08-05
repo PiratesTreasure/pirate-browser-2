@@ -134,6 +134,7 @@ function createMainWindow() {
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => { mainWindow = null; });
 
+
   if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
 }
 
@@ -296,7 +297,7 @@ ipcMain.on('accounts:setup-partition', (_e, { partition }) => {
   const ses = session.fromPartition(partition);
   ses.setUserAgent(
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
-    'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
   );
 
   // Strip CSP from ShippingManager responses so injected scripts can make
@@ -323,6 +324,14 @@ ipcMain.on('accounts:setup-partition', (_e, { partition }) => {
 // ── Open external links in system browser ────────────────────
 ipcMain.on('shell:open-external', (_e, url) => shell.openExternal(url));
 
+// ── Ctrl+Tab / Ctrl+Shift+Tab tab cycling ────────────────────
+const { globalShortcut } = require('electron');
+app.whenReady().then(() => {
+  globalShortcut.register('Control+Tab',       () => mainWindow?.webContents.send('tab:cycle',  1));
+  globalShortcut.register('Control+Shift+Tab', () => mainWindow?.webContents.send('tab:cycle', -1));
+});
+
+
 // ============================================================
 //  Prevent Chrome from throttling or freezing background renderers
 //  Must be set before app.whenReady()
@@ -342,6 +351,7 @@ app.whenReady().then(() => {
   }
   createMainWindow();
   setupUpdaterEvents();
+
   // Auto-check for updates 5s after launch, then every 30 min (production only)
   if (!isDev && autoUpdater) {
     setTimeout(() => autoUpdater.checkForUpdates().catch(e => console.error('[Updater] Check failed:', e.message)), 5000);

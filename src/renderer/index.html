@@ -599,6 +599,12 @@ webview.active { display: flex; }
     <button class="nav-btn" onclick="forceResetWebview()" title="Force reset — destroys & recreates webview (fixes frozen/broken tabs)" style="color:var(--red);border-color:var(--red)">
       <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1v4M7 9v4M1 7h4M9 7h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
     </button>
+    <button class="nav-btn" id="auto-reset-btn" onclick="openAutoResetModal()" title="Auto refresh settings">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5"/><path d="M7 4v3.5l2 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="nav-btn" onclick="openWebviewDevTools()" title="Open DevTools for this webview (inspect network, console)" style="color:var(--blue);border-color:var(--blue)">
+      <svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M4 6l2.5 2L4 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M8 10h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>
     <div class="toolbar-div"></div>
     <div class="tools-drop" id="tools-drop">
       <button class="toolbar-btn" id="tools-btn" onclick="toggleToolsMenu()">
@@ -923,30 +929,126 @@ function forceResetWebview() {
   recreateWebview(activeId);
 }
 
-// ── Auto force-reset every 2 hours per tab ───────────────────
-// Prevents the game from freezing/bugging out over long sessions.
-// Tabs are staggered 5 minutes apart so they don't all reset at once.
-var AUTO_RESET_INTERVAL = 2 * 60 * 60 * 1000; // 2 hours
-var AUTO_RESET_STAGGER  = 5 * 60 * 1000;       // 5 minutes between tabs
+// ── Auto force-reset (configurable) ──────────────────────────
+var AUTO_RESET_STAGGER = 5 * 60 * 1000; // 5 min between tabs (fixed)
+var autoResetTimers = {}; // track timer IDs per tab so we can cancel
+
+function getAutoResetSettings() {
+  return {
+    enabled: localStorage.getItem('autoResetEnabled') !== 'false',
+    hours:   parseFloat(localStorage.getItem('autoResetHours') || '2') || 2
+  };
+}
+
+function saveAutoResetSettings(enabled, hours) {
+  localStorage.setItem('autoResetEnabled', enabled ? 'true' : 'false');
+  localStorage.setItem('autoResetHours', String(hours));
+  updateAutoResetBtn();
+}
+
+function updateAutoResetBtn() {
+  var btn = document.getElementById('auto-reset-btn');
+  if (!btn) return;
+  var s = getAutoResetSettings();
+  btn.style.color       = s.enabled ? 'var(--accent)' : 'var(--muted)';
+  btn.style.borderColor = s.enabled ? 'var(--accent)' : 'var(--muted)';
+  btn.title = 'Auto refresh: ' + (s.enabled ? 'every ' + s.hours + 'h' : 'disabled');
+}
 
 function scheduleAutoReset(id, delayMs) {
-  setTimeout(function() {
+  clearTimeout(autoResetTimers[id]);
+  var s = getAutoResetSettings();
+  if (!s.enabled) return;
+  autoResetTimers[id] = setTimeout(function() {
+    var cur = getAutoResetSettings();
+    if (!cur.enabled) return;
     console.log('[AutoReset] Scheduled force-reset for tab ' + id);
     recreateWebview(id);
-    // Schedule the next reset for this tab in 2 hours
-    scheduleAutoReset(id, AUTO_RESET_INTERVAL);
+    scheduleAutoReset(id, cur.hours * 60 * 60 * 1000);
   }, delayMs);
 }
 
-function initAutoResets() {
+function stopAllAutoResets() {
+  Object.keys(autoResetTimers).forEach(function(id) {
+    clearTimeout(autoResetTimers[id]);
+    delete autoResetTimers[id];
+  });
+}
+
+function restartAllAutoResets() {
+  stopAllAutoResets();
+  var s = getAutoResetSettings();
+  if (!s.enabled) return;
+  var intervalMs = s.hours * 60 * 60 * 1000;
   var i = 0;
   webviews.forEach(function(_wv, id) {
-    // First reset: 2 hours + stagger offset so tabs don't all reset together
-    var firstDelay = AUTO_RESET_INTERVAL + (i * AUTO_RESET_STAGGER);
-    console.log('[AutoReset] Tab ' + id + ' will first reset in ' + Math.round(firstDelay / 60000) + ' min');
+    var firstDelay = intervalMs + (i * AUTO_RESET_STAGGER);
+    console.log('[AutoReset] Tab ' + id + ' next reset in ' + Math.round(firstDelay / 60000) + ' min');
     scheduleAutoReset(id, firstDelay);
     i++;
   });
+}
+
+function initAutoResets() {
+  updateAutoResetBtn();
+  restartAllAutoResets();
+}
+
+// ── Auto-reset settings modal ─────────────────────────────────
+function openAutoResetModal() {
+  if (document.getElementById('auto-reset-modal')) return;
+  var s = getAutoResetSettings();
+  var modal = document.createElement('div');
+  modal.id = 'auto-reset-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6)';
+  modal.innerHTML = [
+    '<div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:24px;width:320px;box-shadow:0 8px 32px #000a">',
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">',
+        '<span style="font-weight:600;font-size:14px">Auto Refresh Settings</span>',
+        '<button onclick="document.getElementById(\'auto-reset-modal\').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;line-height:1;padding:0">&times;</button>',
+      '</div>',
+      '<label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;cursor:pointer">',
+        '<span style="font-size:13px">Enable auto refresh</span>',
+        '<div id="ar-toggle" onclick="arToggleClick()" style="width:40px;height:22px;border-radius:11px;cursor:pointer;position:relative;transition:background .2s;background:' + (s.enabled ? 'var(--accent)' : '#444') + '">',
+          '<div style="position:absolute;top:3px;left:' + (s.enabled ? '21px' : '3px') + ';width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s"></div>',
+        '</div>',
+      '</label>',
+      '<label style="display:block;margin-bottom:6px;font-size:13px">Refresh interval</label>',
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:20px">',
+        '<input id="ar-hours" type="number" min="0.5" max="24" step="0.5" value="' + s.hours + '" style="width:80px;background:var(--bg-input,#111);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:5px 8px;font-size:13px">',
+        '<span style="font-size:13px;color:var(--muted)">hours</span>',
+      '</div>',
+      '<div style="display:flex;gap:8px;justify-content:flex-end">',
+        '<button onclick="document.getElementById(\'auto-reset-modal\').remove()" style="padding:7px 16px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text);cursor:pointer;font-size:13px">Cancel</button>',
+        '<button onclick="arSave()" style="padding:7px 16px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:600">Save</button>',
+      '</div>',
+    '</div>'
+  ].join('');
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+}
+
+var _arEnabled = null;
+function arToggleClick() {
+  if (_arEnabled === null) _arEnabled = getAutoResetSettings().enabled;
+  _arEnabled = !_arEnabled;
+  var tog = document.getElementById('ar-toggle');
+  if (!tog) return;
+  tog.style.background = _arEnabled ? 'var(--accent)' : '#444';
+  tog.children[0].style.left = _arEnabled ? '21px' : '3px';
+}
+
+function arSave() {
+  var s = getAutoResetSettings();
+  var enabled = _arEnabled !== null ? _arEnabled : s.enabled;
+  var hoursInput = document.getElementById('ar-hours');
+  var hours = hoursInput ? (parseFloat(hoursInput.value) || 2) : s.hours;
+  hours = Math.max(0.5, Math.min(24, hours));
+  _arEnabled = null;
+  saveAutoResetSettings(enabled, hours);
+  restartAllAutoResets();
+  document.getElementById('auto-reset-modal').remove();
+  console.log('[AutoReset] Settings saved — enabled:' + enabled + ' interval:' + hours + 'h');
 }
 
 
@@ -1429,6 +1531,7 @@ function setupToolsListener() {
 
 // ── Start ─────────────────────────────────────────────────────
 // F12 opens DevTools for the active webview (to see script console logs)
+// Ctrl+Tab / Ctrl+Shift+Tab cycles through account tabs
 document.addEventListener('keydown', (e) => {
   if (e.key === 'F12') {
     if (activeId) {
@@ -1436,7 +1539,25 @@ document.addEventListener('keydown', (e) => {
       if (wv && wv.openDevTools) wv.openDevTools();
     }
   }
+
 });
+
+// Ctrl+Tab / Ctrl+Shift+Tab — fired from globalShortcut in main.js
+window.pirate.system.on('tab:cycle', (dir) => {
+  const ids = Array.from(webviews.keys());
+  if (ids.length < 2) return;
+  const cur = ids.indexOf(activeId);
+  const next = dir < 0
+    ? (cur <= 0 ? ids.length - 1 : cur - 1)
+    : (cur >= ids.length - 1 ? 0 : cur + 1);
+  switchTo(ids[next]);
+});
+
+function openWebviewDevTools() {
+  if (!activeId) return;
+  const wv = webviews.get(activeId);
+  if (wv && wv.openDevTools) wv.openDevTools();
+}
 
 document.addEventListener('DOMContentLoaded', () => { init(); setTimeout(setupToolsListener, 3000); initUpdater(); });
 

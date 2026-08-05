@@ -1,5 +1,9 @@
 # Pirate Browser 2.0 — Changelog
 
+## v2.6.3
+- Toolbar: Ctrl+Tab / Ctrl+Shift+Tab cycles between browser tabs
+- Toolbar: Clock icon button opens Auto Refresh settings — toggle on/off and set custom interval (0.5–24h, default 2h); settings persist across sessions and apply immediately without restart
+
 ## v2.6.2
 - Auto Postpone Drydock: New script — automatically postpones drydock every 7 days via direct API call (no shop tab required); costs 1,200 points per run; Run Now button for manual/test use
 
