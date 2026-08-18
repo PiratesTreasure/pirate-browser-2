@@ -1,5 +1,8 @@
 # Pirate Browser 2.0 — Changelog
 
+## v2.6.5
+- Tabs: Double-click a tab name to rename it inline — type and press Enter to save, Escape to cancel
+
 ## v2.6.4
 - Toolbar: Ctrl+Shift+F5 force-resets the active tab (same as clicking the red reset button)
 

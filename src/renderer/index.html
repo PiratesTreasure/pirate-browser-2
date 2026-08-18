@@ -1126,11 +1126,32 @@ function createTab(id, label) {
   tab.onclick = (e) => { if (!e.target.closest('.tab-close')) switchTo(id); };
   tab.addEventListener('dblclick', (e) => {
     if (e.target.closest('.tab-close')) return;
-    const n = prompt('Rename account:', label);
-    if (n && n.trim()) {
-      window.pirate.accounts.rename(id, n.trim());
-      tab.querySelector('.tab-label').textContent = n.trim();
-    }
+    const labelEl = tab.querySelector('.tab-label');
+    const current = labelEl.textContent;
+    const input = document.createElement('input');
+    input.value = current;
+    input.style.cssText = 'width:100%;background:transparent;border:none;border-bottom:1px solid var(--accent);color:inherit;font:inherit;outline:none;padding:0;min-width:0';
+    labelEl.replaceWith(input);
+    input.focus();
+    input.select();
+    const commit = () => {
+      const val = input.value.trim() || current;
+      const newLabel = document.createElement('span');
+      newLabel.className = 'tab-label';
+      newLabel.title = val;
+      newLabel.textContent = val;
+      input.replaceWith(newLabel);
+      if (val !== current) {
+        window.pirate.accounts.rename(id, val);
+        label = val;
+      }
+    };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter')  { input.blur(); }
+      if (ev.key === 'Escape') { input.value = current; input.blur(); }
+      ev.stopPropagation();
+    });
   });
   document.getElementById('tabs-bar').insertBefore(
     tab, document.getElementById('add-tab-btn')
