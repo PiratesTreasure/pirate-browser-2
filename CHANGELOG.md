@@ -1,5 +1,8 @@
 # Pirate Browser 2.0 — Changelog
 
+## v2.6.4
+- Toolbar: Ctrl+Shift+F5 force-resets the active tab (same as clicking the red reset button)
+
 ## v2.6.3
 - Toolbar: Ctrl+Tab / Ctrl+Shift+Tab cycles between browser tabs
 - Toolbar: Clock icon button opens Auto Refresh settings — toggle on/off and set custom interval (0.5–24h, default 2h); settings persist across sessions and apply immediately without restart

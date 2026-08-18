@@ -1553,6 +1553,11 @@ window.pirate.system.on('tab:cycle', (dir) => {
   switchTo(ids[next]);
 });
 
+// Ctrl+Shift+F5 — force-reset the active tab
+window.pirate.system.on('tab:force-reset', () => {
+  if (activeId) recreateWebview(activeId);
+});
+
 function openWebviewDevTools() {
   if (!activeId) return;
   const wv = webviews.get(activeId);

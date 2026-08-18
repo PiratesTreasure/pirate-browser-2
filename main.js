@@ -327,8 +327,9 @@ ipcMain.on('shell:open-external', (_e, url) => shell.openExternal(url));
 // ── Ctrl+Tab / Ctrl+Shift+Tab tab cycling ────────────────────
 const { globalShortcut } = require('electron');
 app.whenReady().then(() => {
-  globalShortcut.register('Control+Tab',       () => mainWindow?.webContents.send('tab:cycle',  1));
-  globalShortcut.register('Control+Shift+Tab', () => mainWindow?.webContents.send('tab:cycle', -1));
+  globalShortcut.register('Control+Tab',       () => mainWindow?.webContents.send('tab:cycle',      1));
+  globalShortcut.register('Control+Shift+Tab', () => mainWindow?.webContents.send('tab:cycle',     -1));
+  globalShortcut.register('Control+Shift+F5',  () => mainWindow?.webContents.send('tab:force-reset'));
 });
 
 
