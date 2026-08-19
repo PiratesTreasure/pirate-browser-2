@@ -1,5 +1,8 @@
 # Pirate Browser 2.0 — Changelog
 
+## v2.6.6
+- Tabs: Drag and drop tabs to reorder them; order is saved and restored on next launch
+
 ## v2.6.5
 - Tabs: Double-click a tab name to rename it inline — type and press Enter to save, Escape to cancel
 

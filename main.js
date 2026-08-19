@@ -175,6 +175,13 @@ ipcMain.handle('accounts:rename', (_e, { id, label }) => {
   return true;
 });
 
+ipcMain.handle('accounts:reorder', (_e, { ids }) => {
+  const accounts = store.get('accounts', []);
+  const map = Object.fromEntries(accounts.map(a => [a.id, a]));
+  store.set('accounts', ids.map(id => map[id]).filter(Boolean));
+  return true;
+});
+
 // ============================================================
 //  IPC — Scripts
 // ============================================================

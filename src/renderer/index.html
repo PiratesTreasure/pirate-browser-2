@@ -147,6 +147,8 @@ html, body {
 }
 .account-tab:hover .tab-close { opacity: 1; }
 .tab-close:hover { background: var(--red); color: #fff; }
+.account-tab { cursor: grab; }
+.account-tab.drag-over { border-bottom-color: var(--accent); background: var(--accent-glow); }
 
 #add-tab-btn {
   display: flex; align-items: center; justify-content: center;
@@ -1110,11 +1112,58 @@ function switchTo(id) {
   updateBadge();
 }
 
+// ── Tab drag-to-reorder ───────────────────────────────────────
+let _dragSrcId = null;
+
+function onTabDragStart(e, id) {
+  _dragSrcId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '0.4';
+}
+
+function onTabDragEnd(e) {
+  e.currentTarget.style.opacity = '';
+  document.querySelectorAll('.account-tab').forEach(t => t.classList.remove('drag-over'));
+}
+
+function onTabDragOver(e, id) {
+  if (_dragSrcId === null || _dragSrcId === id) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.account-tab').forEach(t => t.classList.remove('drag-over'));
+  e.currentTarget.classList.add('drag-over');
+}
+
+function onTabDrop(e, id) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (!_dragSrcId || _dragSrcId === id) return;
+  const bar = document.getElementById('tabs-bar');
+  const addBtn = document.getElementById('add-tab-btn');
+  const srcTab = bar.querySelector(`.account-tab[data-id="${_dragSrcId}"]`);
+  const tgtTab = bar.querySelector(`.account-tab[data-id="${id}"]`);
+  if (!srcTab || !tgtTab) return;
+  // Insert src before or after target depending on position
+  const srcIdx = [...bar.children].indexOf(srcTab);
+  const tgtIdx = [...bar.children].indexOf(tgtTab);
+  if (srcIdx < tgtIdx) bar.insertBefore(srcTab, tgtTab.nextSibling);
+  else bar.insertBefore(srcTab, tgtTab);
+  // Persist new order
+  const ordered = [...bar.querySelectorAll('.account-tab')].map(t => t.dataset.id);
+  window.pirate.accounts.reorder(ordered);
+  _dragSrcId = null;
+}
+
 // ── Tab management ────────────────────────────────────────────
 function createTab(id, label) {
   const tab = document.createElement('button');
   tab.className = 'account-tab';
   tab.dataset.id = id;
+  tab.draggable = true;
+  tab.addEventListener('dragstart', (e) => onTabDragStart(e, id));
+  tab.addEventListener('dragend',   onTabDragEnd);
+  tab.addEventListener('dragover',  (e) => onTabDragOver(e, id));
+  tab.addEventListener('drop',      (e) => onTabDrop(e, id));
   tab.innerHTML = `
     <div class="tab-dot"></div>
     <span class="tab-label" title="${label}">${label}</span>

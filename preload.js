@@ -20,7 +20,8 @@ contextBridge.exposeInMainWorld('pirate', {
     list:           ()              => ipcRenderer.invoke('accounts:list'),
     add:            (label)         => ipcRenderer.invoke('accounts:add',    { label }),
     remove:         (id)            => ipcRenderer.invoke('accounts:remove', { id }),
-    rename:         (id, label)     => ipcRenderer.invoke('accounts:rename', { id, label }),
+    rename:         (id, label)     => ipcRenderer.invoke('accounts:rename',  { id, label }),
+    reorder:        (ids)           => ipcRenderer.invoke('accounts:reorder', { ids }),
     setupPartition: (partition)     => ipcRenderer.send('accounts:setup-partition', { partition }),
   },
 
