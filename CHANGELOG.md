@@ -1,5 +1,9 @@
 # Pirate Browser 2.0 — Changelog
 
+## v2.6.7
+- Auto-Stock v3.1: Two-stage trailing stop system — Stage 1 sells on a loss threshold, Stage 2 activates at a profit target and trails a high-water mark; trailing state persists across page reloads; Investments tab shows Stage/Peak/Trigger per holding; two new settings fields
+- Route Planner v1.4: New "Anchored Only" fleet mode to plan routes for anchored vessels; vessel dropdown shows current destination per ship
+
 ## v2.6.6
 - Tabs: Drag and drop tabs to reorder them; order is saved and restored on next launch
 

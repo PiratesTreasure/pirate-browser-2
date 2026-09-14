@@ -2,7 +2,7 @@
 // @name         ShippingManager - Auto Stock
 // @namespace    http://tampermonkey.net/
 // @description  IPO Alerts and Investments tabs in Finance modal
-// @version      2.99
+// @version      3.1
 // @order        16
 // @author       PiratesTreasure
 // @match        https://shippingmanager.cc/*
@@ -32,6 +32,8 @@
         autoSellEnabled: false,
         autoSellFallingDays: 3,
         autoSellDropPercent: 15,
+        trailingActivationPercent: 20,
+        trailingDropPercent: 10,
         inAppAlerts: true,
         desktopNotifications: false,
         buyBlacklist: []
@@ -245,6 +247,29 @@
         await dbSet('cachedData', cachedData);
     }
 
+    // ============================================
+    // TRAILING STOP STATE (Stage 1 / Stage 2)
+    // ============================================
+    // Keyed by company id (stable across purchases/sales of the same company).
+    // Only holdings that have activated Stage 2 (trailing) get an entry here -
+    // absence of an entry means a holding is still in Stage 1. This makes
+    // "delete on full close" the entire cleanup mechanism: a later fresh
+    // investment in the same company naturally starts with no old high-water
+    // mark, since nothing recreates the entry until it re-activates.
+    var trailingState = {};
+
+    async function loadTrailingState() {
+        var data = await dbGet('trailingState');
+        if (data && typeof data === 'object') {
+            trailingState = data;
+            log('Loaded trailing state: ' + Object.keys(trailingState).length + ' tracked holding(s)');
+        }
+    }
+
+    async function saveTrailingState() {
+        await dbSet('trailingState', trailingState);
+    }
+
     function formatLastUpdate(timestamp) {
         if (!timestamp) return 'never';
         var ageMs = Date.now() - timestamp;
@@ -452,8 +477,36 @@
             return { company_name: entry[0], ...entry[1] };
         });
 
+        var trailingDirty = false;
+
+        // ---- Stale trailing-state cleanup ----
+        // A Stage-2 entry is removed once its company no longer appears (or
+        // shows zero shares) in this live response - i.e. the position has
+        // been fully closed, whether by Auto-Sell, a manual sell in the
+        // Investments tab, or any other means. Presence/absence against the
+        // authoritative server response is the only signal used, so this
+        // reconciles correctly regardless of how the position closed.
+        var liveIds = {};
+        investmentList.forEach(function(inv) {
+            var totalShares = parseInt(inv.total_shares, 10);
+            if (isNaN(totalShares) || totalShares > 0) {
+                // Trust presence when total_shares is missing/unparseable,
+                // to avoid wiping state on a malformed field.
+                liveIds[String(inv.id)] = true;
+            }
+        });
+
+        Object.keys(trailingState).forEach(function(id) {
+            if (!liveIds[id]) {
+                delete trailingState[id];
+                trailingDirty = true;
+                log('Trailing: cleared stale state for closed position #' + id);
+            }
+        });
+
         if (investmentList.length === 0) {
             log('Auto-Sell: No investments');
+            if (trailingDirty) await saveTrailingState();
             return;
         }
 
@@ -464,23 +517,73 @@
             var currentValue = parseFloat(inv.current_value);
             var boughtAt = parseFloat(inv.bought_at);
             var availableToSell = parseInt(inv.available_to_sell, 10);
+            if (isNaN(availableToSell)) availableToSell = 0;
 
-            if (!availableToSell || availableToSell <= 0) continue;
-
-            var dropPercent = 0;
-            if (boughtAt > 0) {
-                dropPercent = ((boughtAt - currentValue) / boughtAt) * 100;
-            }
+            var companyId = String(inv.id);
+            var state = trailingState[companyId];
 
             var shouldSell = false;
             var sellReason = '';
 
-            if (dropPercent >= settings.autoSellDropPercent) {
-                shouldSell = true;
-                sellReason = 'dropped ' + dropPercent.toFixed(1) + '%';
+            if (state && state.stage === 2) {
+                // ---- Stage 2: sticky trailing stop ----
+                // Once here, bought_at is never consulted again for the sell
+                // decision - only current price vs. the recorded high matters.
+                // A later blended bought_at change (from buying more shares)
+                // therefore cannot deactivate trailing protection.
+                if (!isNaN(currentValue) && currentValue > state.highWaterMark) {
+                    state.highWaterMark = currentValue;
+                    trailingDirty = true;
+                }
+
+                var trailingDropPct = 0;
+                if (state.highWaterMark > 0) {
+                    trailingDropPct = ((state.highWaterMark - currentValue) / state.highWaterMark) * 100;
+                }
+
+                if (trailingDropPct >= settings.trailingDropPercent) {
+                    shouldSell = true;
+                    sellReason = 'trailing stop -' + trailingDropPct.toFixed(1) + '% from high ' + formatMoney(state.highWaterMark);
+                }
+            } else {
+                // ---- Stage 1: activation check, then loss-stop ----
+                var profitPercent = 0;
+                if (boughtAt > 0) {
+                    profitPercent = ((currentValue - boughtAt) / boughtAt) * 100;
+                }
+
+                if (profitPercent >= settings.trailingActivationPercent) {
+                    trailingState[companyId] = {
+                        stage: 2,
+                        highWaterMark: currentValue,
+                        activatedAt: Date.now()
+                    };
+                    trailingDirty = true;
+                    log('Trailing: activated for ' + inv.company_name + ' at ' + formatMoney(currentValue) + ' (+' + profitPercent.toFixed(1) + '%)');
+                    // Freshly activated this cycle - high == current price, so
+                    // there is no trailing drop yet. No sell this cycle.
+                } else {
+                    var dropPercent = 0;
+                    if (boughtAt > 0) {
+                        dropPercent = ((boughtAt - currentValue) / boughtAt) * 100;
+                    }
+
+                    if (dropPercent >= settings.autoSellDropPercent) {
+                        shouldSell = true;
+                        sellReason = 'dropped ' + dropPercent.toFixed(1) + '%';
+                    }
+                }
             }
 
             if (!shouldSell) continue;
+
+            if (availableToSell <= 0) {
+                // Sell condition met but shares are still 48h-locked. Keep the
+                // trailing state as-is (high-water mark keeps ratcheting on
+                // later cycles) and retry once some shares unlock.
+                log('Auto-Sell: ' + inv.company_name + ' sell condition met (' + sellReason + ') but shares are locked (48h) - will retry next cycle');
+                continue;
+            }
 
             log('Auto-Sell: Selling ' + availableToSell + ' shares of ' + inv.company_name + ' - ' + sellReason);
 
@@ -494,6 +597,10 @@
                     showToast(sellMsg, 'warning');
                 }
                 sendSystemNotification('Auto Stock - Sold', sellMsg);
+                // Deliberately not deleted here even if this was the last
+                // unlocked tranche - a remaining locked tranche must keep its
+                // trailing state. Cleanup only happens above, once the
+                // position is confirmed fully closed on a later cycle.
             } else {
                 var errMsg = result && result.error ? result.error : 'Unknown error';
                 if (errMsg === 'stock_is_locked') {
@@ -502,6 +609,10 @@
                     log('Auto-Sell: FAILED - ' + errMsg);
                 }
             }
+        }
+
+        if (trailingDirty) {
+            await saveTrailingState();
         }
     }
 
@@ -610,6 +721,17 @@
         if (trend === 'up') return '<span style="color:#22c55e;">&#9650;</span>';
         if (trend === 'down') return '<span style="color:#ef4444;">&#9660;</span>';
         return '<span style="color:#94a3b8;">&#9644;</span>';
+    }
+
+    function renderStageBadge(inv) {
+        var state = trailingState[String(inv.id)];
+        if (state && state.stage === 2) {
+            var trigger = state.highWaterMark * (1 - settings.trailingDropPercent / 100);
+            return '<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#0db8f4;color:#fff;font-size:10px;font-weight:700;white-space:nowrap;">TRAILING</span>' +
+                '<div style="font-size:10px;color:#626b90;margin-top:2px;">Peak ' + formatMoney(state.highWaterMark) + '</div>' +
+                '<div style="font-size:10px;color:#626b90;">Trig ' + formatMoney(trigger) + '</div>';
+        }
+        return '<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#94a3b8;color:#fff;font-size:10px;font-weight:700;white-space:nowrap;">STAGE 1</span>';
     }
 
     function formatTimeRemaining(timestampSec) {
@@ -806,9 +928,19 @@
                         <span style="font-size:14px;">Enable Auto-Sell (sell when stock falls)</span>\
                     </label>\
                     <div style="margin-bottom:16px;">\
-                        <label style="display:block;margin-bottom:6px;font-size:13px;">Auto-Sell: Drop Threshold (%)</label>\
+                        <label style="display:block;margin-bottom:6px;font-size:13px;">Stage 1 Loss Stop (%)</label>\
                         <input type="number" id="as-drop-percent" min="1" max="100" value="' + settings.autoSellDropPercent + '" class="as-input">\
-                        <div style="font-size:11px;color:#626b90;margin-top:4px;">Sell if stock drops X% from purchase price</div>\
+                        <div style="font-size:11px;color:#626b90;margin-top:4px;">Sell if stock drops X% below purchase price (before trailing activates)</div>\
+                    </div>\
+                    <div style="margin-bottom:16px;">\
+                        <label style="display:block;margin-bottom:6px;font-size:13px;">Trailing Activation (%)</label>\
+                        <input type="number" id="as-trailing-activation" min="1" max="1000" value="' + settings.trailingActivationPercent + '" class="as-input">\
+                        <div style="font-size:11px;color:#626b90;margin-top:4px;">Switch to a trailing stop once profit reaches this level. Sticky once activated.</div>\
+                    </div>\
+                    <div style="margin-bottom:16px;">\
+                        <label style="display:block;margin-bottom:6px;font-size:13px;">Trailing Drop (%)</label>\
+                        <input type="number" id="as-trailing-drop" min="1" max="100" value="' + settings.trailingDropPercent + '" class="as-input">\
+                        <div style="font-size:11px;color:#626b90;margin-top:4px;">Sell if price falls X% from the highest price seen since trailing activated</div>\
                     </div>\
                 </div>\
                 <div class="as-section">\
@@ -906,7 +1038,19 @@
 
             var dropPercent = parseInt(document.getElementById('as-drop-percent').value, 10);
             if (isNaN(dropPercent) || dropPercent < 1 || dropPercent > 100) {
-                showToast('Drop Threshold must be between 1 and 100', 'error');
+                showToast('Stage 1 Loss Stop must be between 1 and 100', 'error');
+                return;
+            }
+
+            var trailingActivation = parseInt(document.getElementById('as-trailing-activation').value, 10);
+            if (isNaN(trailingActivation) || trailingActivation < 1) {
+                showToast('Trailing Activation must be at least 1', 'error');
+                return;
+            }
+
+            var trailingDrop = parseInt(document.getElementById('as-trailing-drop').value, 10);
+            if (isNaN(trailingDrop) || trailingDrop < 1 || trailingDrop > 100) {
+                showToast('Trailing Drop must be between 1 and 100', 'error');
                 return;
             }
 
@@ -915,6 +1059,8 @@
             settings.minCashReserve = minCash;
             settings.maxStockPrice = maxPrice;
             settings.autoSellDropPercent = dropPercent;
+            settings.trailingActivationPercent = trailingActivation;
+            settings.trailingDropPercent = trailingDrop;
             settings.autoBuyEnabled = document.getElementById('as-autobuy-enabled').checked;
             settings.autoSellEnabled = document.getElementById('as-autosell-enabled').checked;
             settings.inAppAlerts = document.getElementById('as-inapp-alerts').checked;
@@ -1079,7 +1225,7 @@
 
         var content = document.createElement('div');
         content.id = 'autostock-tabs-content';
-        content.style.cssText = 'padding:10px;height:100%;overflow-y:auto;';
+        content.style.cssText = 'padding:10px;height:100%;overflow-y:auto;overflow-x:auto;';
         content.innerHTML = '<div style="text-align:center;padding:40px;color:#626b90;">Loading...</div>';
         container.appendChild(content);
 
@@ -1373,6 +1519,7 @@
         html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
         html += '<thead><tr style="background:#626b90;color:#fff;">';
         html += '<th style="padding:4px 2px;text-align:left;">Company</th>';
+        html += '<th style="padding:4px 2px;text-align:center;">Stage</th>';
         html += '<th style="padding:4px 2px;text-align:right;">Shares</th>';
         html += '<th style="padding:4px 2px;text-align:right;">Bought</th>';
         html += '<th style="padding:4px 2px;text-align:right;white-space:nowrap;">Current</th>';
@@ -1414,6 +1561,7 @@
 
             html += '<tr style="background:' + bgColor + ';">';
             html += '<td style="padding:4px 2px;">' + escapeHtml(inv.company_name) + '</td>';
+            html += '<td style="padding:4px 2px;text-align:center;">' + renderStageBadge(inv) + '</td>';
             html += '<td style="padding:4px 2px;text-align:right;">' + formatNumber(shares) + '</td>';
             html += '<td style="padding:4px 2px;text-align:right;">' + formatMoney(buyPrice) + '</td>';
             html += '<td style="padding:4px 2px;text-align:right;white-space:nowrap;">' + formatMoney(currentPrice) + ' ' + getTrendIcon(inv.stock_trend) + '</td>';
@@ -1564,6 +1712,7 @@
             bridgeReady = true;
             await loadSettings();
             await loadCachedData();
+            await loadTrailingState();
             log('Bridge ready');
 
             // Initial IPO check only if cache is stale (older than 15 minutes)
@@ -1632,6 +1781,7 @@
                         bridgeReady = true;
                         await loadSettings();
                         await loadCachedData();
+                        await loadTrailingState();
                     }
 
                     // IPO Refresh

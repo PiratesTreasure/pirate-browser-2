@@ -2,7 +2,7 @@
 // @name         ShippingManager - Route Planner
 // @namespace    https://github.com/PiratesTreasure
 // @description  Plan optimal routes based on demand, travel time, and pirate risk
-// @version      1.1
+// @version      1.4
 // @author       https://github.com/PiratesTreasure
 // @order        15
 // @match        https://shippingmanager.cc/*
@@ -676,6 +676,14 @@
         return 0;
     }
 
+    // Current route destination, if the vessel already has one assigned - reads the
+    // same in-memory vessel object, no API call. Omitted entirely when absent.
+    function getDestinationSuffix(vessel) {
+        if (!vessel.route_destination) return '';
+        if (vessel.route_destination === vessel.current_port_code) return '';
+        return ' → ' + vessel.route_destination;
+    }
+
     // Fuel formula capacity: tankers use BBL/74 conversion to TEU-equivalent
     function getFuelCapacity(vessel) {
         var cap = vessel.capacity_max || {};
@@ -694,6 +702,15 @@
                 v.status === 'pending' || v.status === 'anchor' ||
                 v.is_parked
             );
+        });
+    }
+
+    // Anchored subset of idle vessels (same in-memory store, no extra API calls).
+    function getAnchoredVessels() {
+        var vesselStore = getVesselStore();
+        if (!vesselStore || !vesselStore.userVessels) return [];
+        return vesselStore.userVessels.filter(function(v) {
+            return v.current_port_code && v.status === 'anchor';
         });
     }
 
@@ -1295,14 +1312,46 @@
         vesselSelect.id = 'rp-vessel-select';
         vesselSelect.style.minWidth = '220px';
 
+        // Counts for the two group selectors - same in-memory data, no extra API calls
+        var idle = getIdleVessels();
+        var anchored = getAnchoredVessels();
+
         // Fleet mode option
         var fleetOpt = document.createElement('option');
         fleetOpt.value = '__fleet__';
-        fleetOpt.textContent = '⚓ Fleet Mode (all idle vessels)';
+        fleetOpt.textContent = '⚓ Fleet Mode — All Idle Vessels (' + idle.length + ')';
         vesselSelect.appendChild(fleetOpt);
 
-        // Group idle vessels by type
-        var idle = getIdleVessels();
+        // Anchored-only option (subset of idle vessels, same in-memory data)
+        var anchoredOpt = document.createElement('option');
+        anchoredOpt.value = '__anchored__';
+        anchoredOpt.textContent = '⚓ Anchored Only — Plan All (' + anchored.length + ')';
+        vesselSelect.appendChild(anchoredOpt);
+
+        // Anchored vessels - individual list for quickly picking ONE anchored
+        // vessel, in addition to the "Anchored Only — Plan All" group option
+        // above. Each option's value is the vessel's normal id, so selecting
+        // it is identical to selecting the same vessel from Containers/Tankers
+        // below (single-vessel mode, not fleet planning). Intentionally
+        // duplicated: an anchored vessel also appears again in its normal
+        // Containers/Tankers section further down, unchanged. Omitted
+        // entirely when there are no anchored vessels.
+        if (anchored.length > 0) {
+            var aGroup = document.createElement('optgroup');
+            aGroup.label = 'Anchored Vessels (' + anchored.length + ')';
+            anchored.sort(function(a, b) { return getVesselCapacity(b) - getVesselCapacity(a); });
+            for (var ai = 0; ai < anchored.length; ai++) {
+                var av = anchored[ai];
+                var avUnit = av.capacity_type === 'tanker' ? 'BBL' : 'TEU';
+                var ao = document.createElement('option');
+                ao.value = av.id;
+                ao.textContent = av.name + ' (' + formatNumber(getVesselCapacity(av)) + ' ' + avUnit + ' @ ' + av.current_port_code + ')' + getDestinationSuffix(av);
+                aGroup.appendChild(ao);
+            }
+            vesselSelect.appendChild(aGroup);
+        }
+
+        // Group idle vessels by type (unchanged - independent of which group selector is active)
         var containers = idle.filter(function(v) { return v.capacity_type === 'container'; });
         var tankers = idle.filter(function(v) { return v.capacity_type === 'tanker'; });
 
@@ -1313,7 +1362,7 @@
             for (var ci = 0; ci < containers.length; ci++) {
                 var co = document.createElement('option');
                 co.value = containers[ci].id;
-                co.textContent = containers[ci].name + ' (' + formatNumber(getVesselCapacity(containers[ci])) + ' TEU @ ' + containers[ci].current_port_code + ')';
+                co.textContent = containers[ci].name + ' (' + formatNumber(getVesselCapacity(containers[ci])) + ' TEU @ ' + containers[ci].current_port_code + ')' + getDestinationSuffix(containers[ci]);
                 cGroup.appendChild(co);
             }
             vesselSelect.appendChild(cGroup);
@@ -1326,7 +1375,7 @@
             for (var ti = 0; ti < tankers.length; ti++) {
                 var to2 = document.createElement('option');
                 to2.value = tankers[ti].id;
-                to2.textContent = tankers[ti].name + ' (' + formatNumber(getVesselCapacity(tankers[ti])) + ' BBL @ ' + tankers[ti].current_port_code + ')';
+                to2.textContent = tankers[ti].name + ' (' + formatNumber(getVesselCapacity(tankers[ti])) + ' BBL @ ' + tankers[ti].current_port_code + ')' + getDestinationSuffix(tankers[ti]);
                 tGroup.appendChild(to2);
             }
             vesselSelect.appendChild(tGroup);
@@ -1352,7 +1401,7 @@
 
         // Update max speed when vessel changes
         vesselSelect.addEventListener('change', function() {
-            if (vesselSelect.value === '__fleet__') {
+            if (vesselSelect.value === '__fleet__' || vesselSelect.value === '__anchored__') {
                 speedInput.max = '50';
             } else {
                 var v = findVesselById(vesselSelect.value);
@@ -1434,16 +1483,20 @@
         var cacheAge = cache.timestamp ? Math.round((Date.now() - cache.timestamp) / 60000) : null;
 
         var isFleet = vesselSelect.value === '__fleet__';
+        var isAnchored = vesselSelect.value === '__anchored__';
 
-        if (isFleet) {
-            lastMode = 'fleet';
-            var idleVessels = getIdleVessels();
-            if (idleVessels.length === 0) {
-                resultsContainer.innerHTML = '<div class="rp-warn">No idle vessels found. Vessels must be moored at a port to plan routes.</div>';
+        if (isFleet || isAnchored) {
+            lastMode = isAnchored ? 'anchored' : 'fleet';
+            var groupVessels = isAnchored ? getAnchoredVessels() : getIdleVessels();
+            if (groupVessels.length === 0) {
+                var emptyMsg = isAnchored
+                    ? 'No anchored vessels found.'
+                    : 'No idle vessels found. Vessels must be moored at a port to plan routes.';
+                resultsContainer.innerHTML = '<div class="rp-warn">' + emptyMsg + '</div>';
                 updateFooter(cacheAge);
                 return;
             }
-            var assignments = await planFleet(idleVessels, cache.ports, speed, function(msg) {
+            var assignments = await planFleet(groupVessels, cache.ports, speed, function(msg) {
                 resultsContainer.innerHTML = '<div style="color:#8899aa;padding:20px;text-align:center;">' + msg + '</div>';
             });
             lastFleetResults = assignments;
