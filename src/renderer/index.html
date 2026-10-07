@@ -1553,9 +1553,10 @@ function renderToolsMenu() {
 
 // Listen for scripts registering new menu items
 function setupToolsListener() {
-  const wv = webviews.get(activeId);
-  if (!wv) return;
-  // Poll the webview for registered menu items every 2s
+  // Poll the webview for registered menu items every 2s.
+  // No early return here: this runs 3 s after start-up, when the first webview may not be ready yet
+  // (activeId is only set on its first dom-ready). The poller re-checks the active webview on every
+  // tick anyway, so it must always be installed or the Tools menu stays at 0 for the whole session.
   setInterval(async () => {
     if (!activeId || !webviewReady.get(activeId)) return;
     const wv = webviews.get(activeId);
