@@ -22,6 +22,42 @@
     var API_BASE = window.PIRATE_API_BASE || 'https://shippingmanager.cc/api';
     var originalFetch = window.fetch;
 
+    // ========== EXTERNAL VESSEL HOLDS (inter-script cooperation) ==========
+    // A commissioning script (one that buys, drydocks, positions and routes a new vessel on the user's behalf)
+    // publishes a per-account hold record in localStorage while it owns a vessel:
+    //   key   axiom-maritime:v3:account:<userId>:commissioning-holds
+    //   value { "schemaVersion": 1, "records": { "<vesselId>": { "state": "OWNED" | "HANDED_OFF" | "OPERATOR_RELEASED", ... } } }
+    // A vessel is held while its record state is OWNED. Auto Drydock then leaves it alone: it is not sent to drydock,
+    // not moored, and not tracked for a post-drydock restore. Accounts that have no such record behave exactly as before.
+    // Auto Drydock only ever READS this key.
+    var HOLD_KEY_PREFIX = 'axiom-maritime:v3:account:';
+    var HOLD_KEY_SUFFIX = ':commissioning-holds';
+
+    function currentUserId() {
+        try {
+            var st = getStore('user');
+            var u = st && st.user;
+            return u && Number.isSafeInteger(u.id) && u.id > 0 ? u.id : null;
+        } catch (e) { return null; }
+    }
+
+    function isExternallyHeld(vesselId) {
+        var uid = currentUserId();
+        if (uid === null) return false;                   // identity unknown: no record can be scoped; legacy behaviour
+        var raw;
+        try { raw = localStorage.getItem(HOLD_KEY_PREFIX + uid + HOLD_KEY_SUFFIX); } catch (e) { return false; }   // storage unavailable: nothing could have been written
+        if (raw === null) return false;                   // no cooperating script on this account: unchanged behaviour
+        try {
+            var s = JSON.parse(raw);
+            var h = s && s.records && s.records[String(vesselId)];
+            return !!(h && h.state === 'OWNED');
+        } catch (e) { return true; }                      // unreadable record: fail safe, leave the vessel alone
+    }
+
+    function withoutExternallyHeld(vesselIds) {
+        return vesselIds.filter(function(id) { return !isExternallyHeld(id); });
+    }
+
     var isModalOpen = false;
     var autoDrydockRunning = false;
     var cachedVessels = null;
@@ -361,6 +397,7 @@
     }
 
     async function sendToDrydock(vesselIds, speed, maintenanceType) {
+        if (Array.isArray(vesselIds)) vesselIds = withoutExternallyHeld(vesselIds);
         if (!Array.isArray(vesselIds) || vesselIds.length === 0) {
             log('sendToDrydock called with invalid vesselIds: ' + JSON.stringify(vesselIds), 'error');
             return null;
@@ -428,6 +465,8 @@
                 return;
             }
             if (!vesselIds || vesselIds.length === 0) return;
+            vesselIds = withoutExternallyHeld(vesselIds);   // a request made by a commissioning script for its own vessel is not ours to track or restore
+            if (vesselIds.length === 0) return;
 
             log('Drydock request detected for ' + vesselIds.length + ' vessel(s)');
 
@@ -539,6 +578,7 @@
                 var earlyId = parseInt(earlyIds[ei], 10);
                 var earlyData = pendingSettingsEarly[earlyIds[ei]];
                 if (!earlyData || !earlyData.moorOnArrival) continue;
+                if (isExternallyHeld(earlyId)) continue;
                 var earlyVessel = vesselMap.get(earlyId);
                 if (!earlyVessel) continue;
                 if (earlyVessel.status === 'port' && !earlyVessel.is_parked) {
@@ -605,6 +645,7 @@
             var pastEntry = pastDrydockVessels[k];
             var pastVessel = vesselMap.get(pastEntry.vesselId);
             if (!pastVessel) continue;
+            if (isExternallyHeld(pastEntry.vesselId)) continue;   // claimed by a commissioning script since we tracked it: leave it alone
 
             // Cache vessel lookup for this iteration
             if ((pastVessel.status === 'port' || pastVessel.status === 'anchor') && !pastVessel.is_parked) {
@@ -706,7 +747,8 @@
                 var notInDrydock = v.status !== 'drydock' && v.status !== 'maintenance';
                 var notGoingToDrydock = !v.next_route_is_maintenance && v.route_dry_operation !== 1;
                 var notParked = !v.is_parked;
-                return belowThreshold && notInDrydock && notGoingToDrydock && notParked;
+                var notHeld = !isExternallyHeld(v.id);
+                return belowThreshold && notInDrydock && notGoingToDrydock && notParked && notHeld;
             });
 
             log('Drydock check: ' + vessels.length + ' total, ' + needsDrydock.length + ' need drydock (threshold: ' + threshold + 'h)');
