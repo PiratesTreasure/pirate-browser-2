@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        ShippingManager - Export all your vessels details
 // @description Export all your vessels with details as CSV
-// @version     1.23
+// @version     1.24
 // @author      https://github.com/PiratesTreasure
 // @order        994
 // @match       https://shippingmanager.cc/*
@@ -14,6 +14,26 @@
 
 (function() {
     'use strict';
+
+    // Cargo type and total cargo capacity, independent of the vessel class.
+    // Container: dry + refrigerated (TEU). Tanker: fuel + crude_oil (BBL).
+    // Note: fuel_capacity is the bunker tank, not tanker cargo capacity.
+    function cargoType(v) {
+        if (v.capacity_type === 'tanker') return 'Tanker';
+        if (v.capacity_type === 'container') return 'Container';
+        return v.capacity_type;
+    }
+
+    function cargoCapacity(v) {
+        if (!v.capacity_max) return undefined;
+        if (v.capacity_type === 'tanker') {
+            return (v.capacity_max.fuel || 0) + (v.capacity_max.crude_oil || 0);
+        }
+        if (v.capacity_type === 'container') {
+            return (v.capacity_max.dry || 0) + (v.capacity_max.refrigerated || 0);
+        }
+        return undefined;
+    }
 
     // Column mapping: [csvHeader, accessor(vessel)]
     // Nested fields use dot-path accessors, booleans use flag accessor
@@ -60,7 +80,10 @@
         ['time_acquired', function(v) { return v.time_acquired; }],
         ['time_arrival', function(v) { return v.time_arrival; }],
         ['engine_type', function(v) { return v.engine_type; }],
-        ['price', function(v) { return v.price; }]
+        ['price', function(v) { return v.price; }],
+        // Appended columns (existing columns keep their names and positions)
+        ['cargo_type', cargoType],
+        ['cargo_capacity', cargoCapacity]
     ];
 
     // Pre-build header string once
