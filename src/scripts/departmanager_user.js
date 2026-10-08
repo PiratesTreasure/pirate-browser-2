@@ -2,7 +2,7 @@
 // @name         ShippingManager - Depart Manager
 // @namespace    https://github.com/PiratesTreasure
 // @description  Unified departure management: Auto bunker rebuy, auto-depart, route settings
-// @version      3.110
+// @version      3.111
 // @author       https://github.com/PiratesTreasure
 // @order        11
 // @match        https://shippingmanager.cc/*
@@ -163,6 +163,9 @@
     // DEPART LOG STORAGE (PiratesTreasureBridge)
     // ============================================
     var DEPART_LOG_MAX_AGE_DAYS = 7;
+    // The 7-day rotation also runs once a day while the page stays loaded (not only at init)
+    var DEPART_LOG_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+    var lastDepartLogCleanupAt = 0;
     var pendingDepartLogs = [];
 
     function saveDepartLog(entry) {
@@ -201,6 +204,16 @@
         } catch (e) {
             log('cleanupDepartLogs error: ' + e.message, 'error');
         }
+    }
+
+    // Daily gate for the existing 7-day cleanup: one timestamp compare per cycle.
+    // Never runs while departures are in progress; a skipped run is retried on the next cycle.
+    async function maybeCleanupDepartLogsDaily() {
+        if (Date.now() - lastDepartLogCleanupAt < DEPART_LOG_CLEANUP_INTERVAL_MS) return false;
+        if (autoDepartRunning) return false;
+        lastDepartLogCleanupAt = Date.now();
+        await cleanupDepartLogs();
+        return true;
     }
 
     async function migrateDepartLogsSlim() {
@@ -4686,6 +4699,9 @@
         clearCycleCache();
 
         try {
+            // Daily 7-day departure-log rotation, between cycles only (no departures are running here)
+            try { await maybeCleanupDepartLogsDaily(); } catch (e) { log('departLogs daily cleanup error: ' + e.message, 'error'); }
+
             var appliedCount = await applyAllPendingSettings();
             if (appliedCount > 0) {
                 log('Applied pending settings for ' + appliedCount + ' vessel(s)');
@@ -4926,7 +4942,8 @@
             // One-time migration: strip fullApiResponse/fullDepartInfo from old logs
             await migrateDepartLogsSlim();
 
-            // Run depart log cleanup once (7-day rotation)
+            // Run depart log cleanup once (7-day rotation); this also starts the daily clock used by periodicCheck
+            lastDepartLogCleanupAt = Date.now();
             cleanupDepartLogs();
 
             // Initialize auto-price cache in background - don't block UI
