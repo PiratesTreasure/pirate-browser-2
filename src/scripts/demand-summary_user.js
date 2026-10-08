@@ -2,7 +2,7 @@
 // @name         ShippingManager - Demand Summary
 // @namespace    https://github.com/PiratesTreasure
 // @description  Demand & ranking dashboard with map tooltips, CSV export, and route-popup demand/vessel filters
-// @version      5.16
+// @version      5.17
 // @author       https://github.com/PiratesTreasure
 // @order        10
 // @match        https://shippingmanager.cc/*
@@ -931,6 +931,12 @@
         }
     }
 
+    // Blank cell for a missing or non-numeric coordinate (ports carry lat/lon from /port/get-ports)
+    function csvNumber(value) {
+        const n = typeof value === 'number' ? value : parseFloat(value);
+        return Number.isFinite(n) ? n : '';
+    }
+
     function exportToCSV(ports, vesselsByDest) {
         if (!ports || ports.length === 0) {
             showToast('No data to export', 'error');
@@ -961,7 +967,10 @@
             'Tanker Capacity',
             'Alliance Rank',
             'Alliance TEU',
-            'Alliance BBL'
+            'Alliance BBL',
+            'Port Code',
+            'Latitude',
+            'Longitude'
         ];
 
         const rows = [headers.join(',')];
@@ -1002,7 +1011,10 @@
                 vessels.tankerCapacity || 0,
                 myAlliance ? myAlliance.rank : '',
                 myAlliance ? myAlliance.teu : '',
-                myAlliance ? myAlliance.bbl : ''
+                myAlliance ? myAlliance.bbl : '',
+                port.code,
+                csvNumber(port.lat),
+                csvNumber(port.lon)
             ];
 
             rows.push(row.join(','));
