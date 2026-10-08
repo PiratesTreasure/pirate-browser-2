@@ -2,7 +2,7 @@
 // @name         ShippingManager - Depart Manager
 // @namespace    https://github.com/PiratesTreasure
 // @description  Unified departure management: Auto bunker rebuy, auto-depart, route settings
-// @version      3.111
+// @version      3.112
 // @author       https://github.com/PiratesTreasure
 // @order        11
 // @match        https://shippingmanager.cc/*
@@ -291,6 +291,7 @@
         autoDepartEnabled: false,
         departNotifyIngame: true,
         departNotifySystem: false,
+        enforcePirateGuards: false, // opt-in: 10 verified guards on risky/unknown-risk routes before auto-depart
         // Min Utilization Settings
         minUtilizationEnabled: false,
         minUtilizationThreshold: 50,
@@ -787,8 +788,8 @@
         var data = await apiFetch('/vessel/get-all-user-vessels', { include_routes: true });
         if (data && data.data && data.data.user_vessels) {
             var vessels = data.data.user_vessels;
-            // Update hijacking risk cache from vessel routes
-            updateHijackingRiskCache(vessels);
+            // Update hijacking risk cache from vessel routes (own include_routes read = authoritative rebuild)
+            updateHijackingRiskCache(vessels, true);
             return vessels;
         }
         return [];
@@ -798,9 +799,14 @@
      * Update hijacking risk cache from vessel routes data
      * Routes contain hijacking_risk per origin<>destination pair
      * Rebuilds cache from current routes - stale entries for non-existent routes are removed
+     * Only rows that actually carry route data count. Depart Manager's own include_routes read
+     * (authoritative) rebuilds the cache; any other response (intercepted /game/index, vessel lists
+     * without include_routes - in-port rows there have no routes) only adds/updates pairs and never
+     * removes entries. A response without any route data never touches the cache.
      */
-    function updateHijackingRiskCache(vessels) {
+    function updateHijackingRiskCache(vessels, authoritative) {
         var freshCache = {};
+        var found = 0;
         for (var i = 0; i < vessels.length; i++) {
             var vessel = vessels[i];
             if (!vessel.routes || !Array.isArray(vessel.routes)) continue;
@@ -812,10 +818,16 @@
                     // Store both directions since piracy risk applies both ways
                     freshCache[routeKey] = route.hijacking_risk;
                     freshCache[reverseKey] = route.hijacking_risk;
+                    found++;
                 }
             }
         }
-        hijackingRiskCache = freshCache;
+        if (found === 0) return;
+        if (authoritative) {
+            hijackingRiskCache = freshCache;
+            return;
+        }
+        for (var key in freshCache) hijackingRiskCache[key] = freshCache[key];
     }
 
     /**
@@ -833,6 +845,36 @@
         risk = hijackingRiskCache[reverseKey];
         if (risk !== undefined) return risk;
         return 0;
+    }
+
+    // Same lookup for the pirate-guard enforcement, but UNKNOWN (no route endpoints, no usable route data)
+    // returns null instead of 0, so an unknown route is never treated as safe. The vessel's OWN routes[]
+    // entry (from the include_routes read that produced the row) is the primary source; the shared pair
+    // cache is the fallback. Several matching entries -> the highest risk.
+    function pirateRiskNumber(risk) {
+        if (risk === undefined || risk === null || risk === '' || isNaN(Number(risk))) return null;
+        return Number(risk);
+    }
+
+    function vesselOwnRouteRisk(vessel) {
+        if (!Array.isArray(vessel.routes)) return null;
+        var o = vessel.route_origin, d = vessel.route_destination, best = null;
+        for (var i = 0; i < vessel.routes.length; i++) {
+            var r = vessel.routes[i];
+            if (!r || !((r.origin === o && r.destination === d) || (r.origin === d && r.destination === o))) continue;
+            var n = pirateRiskNumber(r.hijacking_risk);
+            if (n !== null && (best === null || n > best)) best = n;
+        }
+        return best;
+    }
+
+    function lookupVesselHijackingRisk(vessel) {
+        if (!vessel.route_origin || !vessel.route_destination) return null;
+        var own = vesselOwnRouteRisk(vessel);
+        if (own !== null) return own;
+        var risk = hijackingRiskCache[vessel.route_origin + '<>' + vessel.route_destination];
+        if (risk === undefined) risk = hijackingRiskCache[vessel.route_destination + '<>' + vessel.route_origin];
+        return pirateRiskNumber(risk);
     }
 
     async function fetchBunkerStateAPI(maxRetries) {
@@ -3002,6 +3044,105 @@
     // ============================================
     var autoDepartRunning = false;
 
+    // ============================================
+    // PIRATE-GUARD ENFORCEMENT (opt-in setting enforcePirateGuards, default OFF; automatic departures only)
+    // Hijacking risk > 0, or UNKNOWN risk, requires PIRATE_GUARDS_REQUIRED guards before Depart Manager
+    // departs a vessel. Vessels below it get ONE /route/update-route-data (same call as Route Settings),
+    // then ONE fresh fleet read for the whole batch; only a vessel whose STORED route_guards reads 10 on
+    // that fresh read is departed. Anything else is withheld this cycle, logged with the reason, shown
+    // once as an in-game warning, and retried on a later cycle. Vessels already at 10 guards and risk-0
+    // routes cost no extra call. Guards are charged by the game on departure (guard fee).
+    // ============================================
+    var PIRATE_GUARDS_REQUIRED = 10;
+    var PIRATE_GUARD_WRITE_SPACING_MS = 200;
+    var pirateGuardNotified = {}; // per page load: one in-game toast per vessel per condition (log lines every cycle)
+
+    function pirateGuardNotifyOnce(kind, vesselId, msg) {
+        var k = kind + ':' + vesselId;
+        if (pirateGuardNotified[k]) return;
+        pirateGuardNotified[k] = true;
+        notify(msg, 'warning', 'depart');
+    }
+
+    async function enforcePirateGuards(readyVessels, skipped) {
+        var toCorrect = [];
+        for (var i = 0; i < readyVessels.length; i++) {
+            var v = readyVessels[i];
+            var risk = lookupVesselHijackingRisk(v);
+            var guards = parseInt(v.route_guards, 10) || 0;
+            if (guards >= PIRATE_GUARDS_REQUIRED) continue;
+            if (risk === null) {
+                var unknownMsg = v.name + ': pirate risk UNKNOWN for ' + v.route_origin + '<>' + v.route_destination + ' - enforcing ' + PIRATE_GUARDS_REQUIRED + ' guards (current ' + guards + ')';
+                log(unknownMsg, 'warn');
+                pirateGuardNotifyOnce('unknown', v.id, unknownMsg);
+                toCorrect.push({ vessel: v, risk: null, guards: guards, sent: false, why: null });
+                continue;
+            }
+            if (risk > 0) {
+                toCorrect.push({ vessel: v, risk: risk, guards: guards, sent: false, why: null });
+            }
+        }
+        if (toCorrect.length === 0) return readyVessels;
+
+        var anySent = false;
+        for (var c = 0; c < toCorrect.length; c++) {
+            var item = toCorrect[c];
+            var vessel = item.vessel;
+            if (!vessel.prices || typeof vessel.prices !== 'object') {
+                item.why = 'vessel row has no prices, update not sent';
+                continue;
+            }
+            log(vessel.name + ': guards ' + item.guards + ' -> ' + PIRATE_GUARDS_REQUIRED + ' (pirate risk ' + (item.risk === null ? 'UNKNOWN' : item.risk + '%') + ')');
+            var updated = await updateRouteData(vessel.id, vessel.route_speed, PIRATE_GUARDS_REQUIRED, vessel.prices, vessel.prices);
+            if (updated) {
+                item.sent = true;
+                anySent = true;
+            } else {
+                item.why = 'update not accepted';
+            }
+            await new Promise(function(r) { setTimeout(r, PIRATE_GUARD_WRITE_SPACING_MS); });
+        }
+
+        // One fresh read for the whole batch; the STORED value decides, never the update response.
+        var freshMap = new Map();
+        if (anySent) {
+            var fresh = await fetchVesselData();
+            if (fresh && fresh.length > 0) {
+                cycleCache.vessels = fresh;
+                for (var f = 0; f < fresh.length; f++) freshMap.set(fresh[f].id, fresh[f]);
+            }
+        }
+
+        var withheld = {};
+        var replacement = {};
+        for (var k = 0; k < toCorrect.length; k++) {
+            var t = toCorrect[k];
+            if (t.sent) {
+                var fv = freshMap.get(t.vessel.id);
+                var freshGuards = fv ? (parseInt(fv.route_guards, 10) || 0) : null;
+                if (!fv) t.why = 'vessel missing from the fresh read';
+                else if (freshGuards !== PIRATE_GUARDS_REQUIRED) t.why = 'stored guards read ' + freshGuards + ' after update';
+                else if (fv.status !== 'port' || fv.is_parked) t.why = 'vessel no longer ready on the fresh read';
+                else replacement[t.vessel.id] = fv;
+            }
+            if (!replacement[t.vessel.id]) {
+                withheld[t.vessel.id] = true;
+                var msg = t.vessel.name + ': guards not confirmed (' + t.why + '; pirate risk ' + (t.risk === null ? 'UNKNOWN' : t.risk + '%') + ') - departure withheld, retry next cycle';
+                log(msg, 'error');
+                skipped.push(msg);
+                pirateGuardNotifyOnce('withheld', t.vessel.id, msg);
+            }
+        }
+
+        var result = [];
+        for (var r = 0; r < readyVessels.length; r++) {
+            var rv = readyVessels[r];
+            if (withheld[rv.id]) continue;
+            result.push(replacement[rv.id] || rv);
+        }
+        return result;
+    }
+
     async function autoDepartVessels(manual) {
         var settings = getSettings();
         if (!manual && !settings.autoDepartEnabled) return { departed: 0 };
@@ -3069,6 +3210,11 @@
             readyVessels.sort(function(a, b) {
                 return getVesselFuelRequired(a) - getVesselFuelRequired(b);
             });
+
+            // Optional pirate-guard enforcement before any departure (withheld vessels are removed from the list)
+            if (settings.enforcePirateGuards) {
+                readyVessels = await enforcePirateGuards(readyVessels, skipped);
+            }
 
             // Port demand cache for this depart cycle (avoids fetching same port 20x)
             var departPortDemandCache = {};
@@ -4275,6 +4421,13 @@
             html += '<span style="font-weight:600;">Enable Auto-Depart</span></label>';
             html += '<div style="font-size:12px;color:#666;margin-top:4px;">Automatically departs vessels with routes when fuel is available.</div>';
             html += '</div>';
+            // Optional pirate-guard enforcement (default OFF)
+            html += '<div style="margin-bottom:12px;">';
+            html += '<label style="display:flex;align-items:center;cursor:pointer;">';
+            html += '<input type="checkbox" id="dm-enforce-pirate-guards"' + (settings.enforcePirateGuards ? ' checked' : '') + ' style="width:18px;height:18px;margin-right:10px;accent-color:#0db8f4;">';
+            html += '<span style="font-weight:600;">Enforce 10 pirate guards before auto-depart</span></label>';
+            html += '<div style="font-size:12px;color:#666;margin-top:4px;">Before an automatic departure, routes with hijacking risk above 0% or unknown risk are set to 10 guards and checked on a fresh read; if 10 guards cannot be confirmed the vessel is not departed and a warning is shown. Guards add a guard fee to each departure. Off = guards are left as they are (e.g. as set by Smuggler\'s Eye or Route Settings).</div>';
+            html += '</div>';
             // Depart Notifications
             html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #ddd;">';
             html += '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">Notifications</div>';
@@ -4480,6 +4633,7 @@
                     co2NotifyIngame: document.getElementById('dm-co2-notify-ingame').checked,
                     co2NotifySystem: document.getElementById('dm-co2-notify-system').checked,
                     autoDepartEnabled: document.getElementById('dm-auto-depart').checked,
+                    enforcePirateGuards: document.getElementById('dm-enforce-pirate-guards') ? document.getElementById('dm-enforce-pirate-guards').checked : false,
                     departNotifyIngame: document.getElementById('dm-depart-notify-ingame').checked,
                     departNotifySystem: document.getElementById('dm-depart-notify-system').checked,
                     blackoutEnabled: document.getElementById('dm-blackout-enabled').checked,
