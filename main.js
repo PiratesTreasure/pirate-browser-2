@@ -8,6 +8,17 @@ const { app, BrowserWindow, ipcMain, session, dialog, shell, powerSaveBlocker, p
 const path = require('path');
 const fs   = require('fs');
 
+// ── Single-instance guard ─────────────────────────────────────
+// Must run before anything else initialises (config store, script
+// registry, windows).  Without it every extra launch starts a second
+// full copy of the browser with duplicate account tabs and scripts.
+// A second launch exits here; the running instance receives the
+// 'second-instance' event (see App lifecycle) and raises its window.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  return;
+}
+
 // ── Auto-updater ──────────────────────────────────────────────
 let autoUpdater = null;
 try {
@@ -373,4 +384,13 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (!mainWindow) createMainWindow();
+});
+
+// Second launch while already running: bring the existing window to the
+// front instead of opening another copy (see single-instance guard above).
+app.on('second-instance', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
 });
