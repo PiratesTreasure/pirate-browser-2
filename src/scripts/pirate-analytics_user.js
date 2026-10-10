@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pirate Analytics
 // @description  Fleet performance dashboard, transaction log, route profitability and trends. Background recording + live dashboard.
-// @version      1.0.0
+// @version      1.0.3
 // @match        https://shippingmanager.cc/*
 // @order        2
 // @background-job-required true
@@ -43,6 +43,151 @@
             dbSet('transactions', txs);
         } catch (e) { if (window.PirateLog) window.PirateLog.warn('PirateAnalytics', 'logTransaction failed', e); }
     }
+
+    // ── 1.0.2: bunker purchase accounting (delivered + charged, not ordered) ──────────────────
+    var BUNKER_TOL_T = 2, BUNKER_TOL_PCT = 0.005;
+    var BUNKER_DM_BAD = { QUANTITY_EXCESS: 1, OVERCHARGE: 1, UNVERIFIED: 1, PRICE_SUSPECT: 1 };
+    function paNum(x) { return typeof x === 'number' && isFinite(x); }
+
+    // Pure: what a bunker purchase really was. i = { orderedTons, price, dm, respStockKg, stockBeforeKg, cashCost, preferCash, success }
+    // dm = Depart Manager's verified result {deliveredTons, chargedTotal, decisionPrice, reportedPrice, priceVerdict, approximate, verdict}
+    function paBunkerAccounting(i) {
+        var ord = paNum(i.orderedTons) && i.orderedTons > 0 ? i.orderedTons : 0;
+        var dm = i.dm || null;
+        var tol = Math.max(BUNKER_TOL_T, ord * BUNKER_TOL_PCT);
+        var f = { orderedTons: ord };
+        if (i.success === false || (dm && dm.verdict === 'REJECTED')) {
+            f.failed = true; f.amountTons = 0; f.deliveredTons = 0; f.costSource = 'refused'; f.discrepancy = ['REFUSED_BY_GAME'];
+            return { fields: f, cost: 0 };
+        }
+        var delivered = null, dsrc = null;
+        if (dm && paNum(dm.deliveredTons)) { delivered = dm.deliveredTons; dsrc = 'dm-verified'; }
+        else if (paNum(i.respStockKg) && paNum(i.stockBeforeKg)) {
+            var d = (i.respStockKg - i.stockBeforeKg) / 1000;
+            if (d > 0 && d < 1e8) { delivered = d; dsrc = 'response-stock'; }   // a zero/negative change is not evidence of a delivery (stale or already-updated page store)
+        }
+        var price = (dm && paNum(dm.reportedPrice)) ? dm.reportedPrice : (dm && paNum(dm.decisionPrice) ? dm.decisionPrice : i.price);
+        var costOrdered = (paNum(price) && price > 0 && ord > 0) ? Math.round(ord * price) : null;
+        var cost = null, csrc = null;
+        if (dm && paNum(dm.chargedTotal) && dm.priceVerdict === 'ok' && !dm.approximate) { cost = Math.round(dm.chargedTotal); csrc = 'dm-verified-charge'; }
+        else if (i.preferCash && paNum(i.cashCost) && i.cashCost > 0) { cost = Math.round(i.cashCost); csrc = 'cash-change'; }
+        else if (delivered !== null && paNum(price) && price > 0) { cost = Math.round(delivered * price); csrc = 'delivered-x-price'; }
+        else if (costOrdered !== null) { cost = costOrdered; csrc = 'ordered-x-price'; }
+        else if (paNum(i.cashCost) && i.cashCost > 0) { cost = Math.round(i.cashCost); csrc = 'cash-change'; }
+        f.amountTons = delivered !== null ? delivered : ord;
+        f.deliveredTons = delivered; f.deliveredSource = dsrc; f.costSource = csrc; f.costOrdered = costOrdered;
+        var disc = [];
+        if (delivered !== null && delivered > ord + tol) disc.push('DELIVERED_MORE');
+        if (delivered !== null && delivered < ord - Math.max(tol, ord * 0.02)) disc.push('DELIVERED_LESS');
+        if (cost !== null && costOrdered !== null && Math.abs(cost - costOrdered) > Math.max(1000, costOrdered * 0.01)) disc.push('COST_DIFFERS_FROM_ORDER');
+        if (dm && BUNKER_DM_BAD[dm.verdict]) disc.push('DM_' + dm.verdict);
+        if (dm && dm.priceVerdict === 'cash-overcharge') disc.push('CASH_ABOVE_PRICE');
+        if (disc.length) f.discrepancy = disc;
+        return { fields: f, cost: cost };
+    }
+
+    function paStockKg(commodity) {
+        try {
+            var app = document.querySelector('#app').__vue_app__;
+            var pinia = app._context.provides.pinia || app.config.globalProperties.$pinia;
+            for (var [k, st] of pinia._s) { if (st.user && paNum(st.user[commodity])) return st.user[commodity]; }
+        } catch {}
+        return null;
+    }
+    function paStockFromResponse(data, commodity) {
+        try { var u = (data && data.user) || (data && data.data && data.data.user); return u && paNum(u[commodity]) ? u[commodity] : null; } catch { return null; }
+    }
+    // Request unit: DM 3.110.9 publishes requestAmount (== the body amount, tonnes for fuel); DM <= 3.110.8 sent a kilogram number
+    // (its published amountTons == amount / 1000); an unpublished fetch-path request is a legacy Depart Manager one.
+    function paBunkerRequest(body, commodity, lpSnap) {
+        var amt = Number(body && body.amount) || 0, lp = null;
+        if (lpSnap !== undefined) lp = lpSnap;              // 1.0.3: the publication as it was WHEN THE REQUEST WAS SENT
+        else { try { lp = window._dmLastPurchase; } catch {} }
+        var fresh = lp && lp.commodity === commodity && Date.now() - lp.at < 60000;
+        if (fresh && lp.requestAmount !== undefined && lp.requestAmount === amt) return { orderedTons: lp.amountTons, id: lp.id, price: lp.pricePerTon || 0, unit: lp.unit || 't' };
+        if (fresh && Math.abs(lp.amountTons - amt / 1000) < 1) return { orderedTons: amt / 1000, id: lp.id, price: lp.pricePerTon || 0, unit: 'kg-legacy' };
+        return { orderedTons: amt / 1000, id: undefined, price: 0, unit: 'kg-assumed' };
+    }
+    function paKnownPrice(commodity) {
+        var p = 0;
+        try { if (window._paBunkerPrices) p = commodity === 'fuel' ? (window._paBunkerPrices.fuel || 0) : (window._paBunkerPrices.co2 || 0); } catch {}
+        if (!p) p = parseFloat(localStorage.getItem('pa_price_' + commodity) || '0');
+        return p;
+    }
+    // Depart Manager verified a purchase AFTER this script logged it: amend that transaction
+    function amendBunkerFromDm(res) {
+        try {
+            if (!res || !res.id) return false;
+            var txs = dbGet('transactions') || [];
+            var t = null;
+            for (var k = 0; k < txs.length; k++) { if (txs[k].dmPurchaseId === res.id) { t = txs[k]; break; } }
+            if (!t) {
+                // 1.0.3: adopt an unlinked transaction of the same purchase (request not recognised at the time), whatever unit PA guessed
+                var rts = Date.parse(res.requestAt), rtype = res.commodity === 'fuel' ? 'bunker_fuel' : 'bunker_co2';
+                for (var j = 0; j < txs.length; j++) {
+                    var x = txs[j];
+                    if (x.type !== rtype || x.dmPurchaseId || x.reconciled || !rts || Math.abs(x.timestamp - rts) > 20000) continue;
+                    var xo = paNum(x.orderedTons) ? x.orderedTons : x.amountTons;
+                    if (!paNum(xo) || !paNum(res.orderedTons)) continue;
+                    if (Math.abs(xo - res.orderedTons) <= 1 || Math.abs(xo * 1000 - res.orderedTons) <= 2 || Math.abs(xo / 1000 - res.orderedTons) <= 1) { t = x; t.dmPurchaseId = res.id; break; }
+                }
+            }
+            if (!t) return false;
+            t.orderedTons = res.orderedTons;
+            var acc = paBunkerAccounting({ orderedTons: t.orderedTons, price: res.decisionPrice, dm: res, success: true });
+            Object.keys(acc.fields).forEach(function(key) { t[key] = acc.fields[key]; });
+            if (!acc.fields.discrepancy) delete t.discrepancy;
+            if (acc.cost !== null) t.cost = acc.cost;
+            delete t.awaitingDm;
+            dbSet('transactions', txs);
+            return true;
+        } catch { return false; }
+    }
+    try { window.addEventListener('dm:purchase-recorded', function(e) { amendBunkerFromDm(e && e.detail); }); } catch {}
+
+    // One-off correction of EXISTING bunker records from Depart Manager's own purchase log (same page storage).
+    // Dry run unless {apply:true}. Matches by commodity + request time (+-30 s) + ordered tonnes; never touches a record twice.
+    function reconcileBunker(opts) {
+        opts = opts || {};
+        var out = { apply: !!opts.apply, matched: 0, changed: [], skipped: 0 };
+        var log = null;
+        try { log = JSON.parse(localStorage.getItem('pirate:DepartManager:data:purchaseLog') || 'null'); } catch {}
+        if (!Array.isArray(log)) { out.error = 'no Depart Manager purchase log'; return out; }
+        var txs = dbGet('transactions') || [];
+        log.forEach(function(e) {
+            if (!e || (e.commodity !== 'fuel' && e.commodity !== 'co2') || !paNum(e.amountTons)) return;
+            var ts = Date.parse(e.requestAt);
+            if (!ts) return;
+            var type = e.commodity === 'fuel' ? 'bunker_fuel' : 'bunker_co2';
+            var best = null;
+            txs.forEach(function(t) {
+                if (t.type !== type || t.reconciled || t.dmPurchaseId) return;
+                if (Math.abs(t.timestamp - ts) > 30000) return;
+                var o = paNum(t.orderedTons) ? t.orderedTons : t.amountTons;
+                if (!paNum(o) || (Math.abs(o - e.amountTons) > 1 && Math.abs(o * 1000 - e.amountTons) > 2)) return;   // 1.0.3: also a record 1000x too small
+                if (!best || Math.abs(t.timestamp - ts) < Math.abs(best.timestamp - ts)) best = t;
+            });
+            if (!best) { out.skipped++; return; }
+            out.matched++;
+            var approx = !!e.chargedIsApproximate;
+            var dm = { deliveredTons: paNum(e.deliveredTons) ? e.deliveredTons : null, decisionPrice: e.decisionPrice, reportedPrice: e.reportedPrice,
+                chargedTotal: (paNum(e.cashBefore) && paNum(e.cashAfter) && !approx) ? e.cashBefore - e.cashAfter : null,
+                priceVerdict: e.priceVerdict, approximate: approx, verdict: e.verdict || undefined };
+            var acc = paBunkerAccounting({ orderedTons: e.amountTons, price: e.decisionPrice, dm: dm, success: true });
+            var before = { amountTons: best.amountTons, cost: best.cost };
+            var after = { amountTons: acc.fields.amountTons, cost: acc.cost !== null ? acc.cost : best.cost, discrepancy: acc.fields.discrepancy || null };
+            if (Math.abs((before.cost || 0) - (after.cost || 0)) < 1 && Math.abs((before.amountTons || 0) - (after.amountTons || 0)) < 0.5 && !acc.fields.discrepancy) return;
+            out.changed.push({ timestamp: best.timestamp, requestAt: e.requestAt, commodity: e.commodity, before: before, after: after });
+            if (opts.apply) {
+                Object.keys(acc.fields).forEach(function(key) { best[key] = acc.fields[key]; });
+                if (acc.cost !== null) best.cost = acc.cost;
+                best.reconciled = true;
+            }
+        });
+        if (opts.apply && out.changed.length) dbSet('transactions', txs);
+        return out;
+    }
+    try { window.PirateAnalyticsReconcileBunker = reconcileBunker; } catch {}
 
     // ── Cash monitor ─────────────────────────────────────────────
     // Polls Pinia store for cash changes and logs outgoing transactions
@@ -225,6 +370,7 @@
 
             if (needsCost) {
                 var cashBefore = getCashFromPinia();
+                var stockBefore = (isBunkerFuel || isBunkerCO2) ? paStockKg(isBunkerFuel ? 'fuel' : 'co2') : null;
                 var reqBody = body;
                 var captureTime = Date.now();
 
@@ -255,7 +401,7 @@
                             if (!cachedPrice) {
                                 cachedPrice = parseFloat(localStorage.getItem('pa_price_' + (isBunkerFuel ? 'fuel' : 'co2')) || '0');
                             }
-                            if (amtKg > 0 && cachedPrice > 0) cost = Math.round((amtKg / 1000) * cachedPrice);
+                            if (amtKg > 0 && cachedPrice > 0) cost = Math.round(amtKg * cachedPrice); // 1.0.2: the game's own UI sends TONNES
                         }
 
                         var label = isBunkerFuel ? 'Fuel Purchase' :
@@ -271,7 +417,14 @@
                                    isRepair     ? 'repair' : 'shop';
 
                         var extra = {};
-                        if (isBunkerFuel || isBunkerCO2) extra.amountTons = (bodyParsed.amount || 0) / 1000;
+                        if (isBunkerFuel || isBunkerCO2) {
+                            // 1.0.2: the game's UI amount is TONNES; delivered tonnes from the response's stock figure
+                            var xComm = isBunkerFuel ? 'fuel' : 'co2';
+                            var xAcc = paBunkerAccounting({ orderedTons: Number(bodyParsed.amount) || 0, price: paKnownPrice(xComm), cashCost: cost, preferCash: true,
+                                respStockKg: paStockFromResponse(data, xComm), stockBeforeKg: stockBefore,
+                                success: !(data && (data.error || (data.data && data.data.success === false))) });
+                            extra = xAcc.fields; cost = xAcc.cost;
+                        }
                         if (isDrydock) extra.vesselCount = (bodyParsed.vessel_ids || []).length;
                         if (isShop) extra.item = bodyParsed.item || bodyParsed.product || 'Item';
 
@@ -448,6 +601,9 @@
         var args = arguments;
         var url  = (args[0] || '').toString();
         var opts = args[1] || {};
+        var paPre = null;   // 1.0.2: stock BEFORE a bunker purchase request (the page store may be updated by the time the response is processed)
+        var paLpSnap = null; // 1.0.3: Depart Manager's publication for THIS request (a later purchase overwrites window._dmLastPurchase within the second)
+        try { if (url.includes('/bunker/purchase-')) { paPre = { fuel: paStockKg('fuel'), co2: paStockKg('co2') }; paLpSnap = window._dmLastPurchase ? Object.assign({}, window._dmLastPurchase) : null; } } catch {}
         var response = await originalFetch.apply(this, args);
 
         try {
@@ -482,25 +638,36 @@
 
             if (isBF || iBC || isDK || isMK) {
                 var cashBefore2 = getCashFromPinia();
+                var stockBefore2 = (isBF || iBC) ? (paPre ? paPre[isBF ? 'fuel' : 'co2'] : paStockKg(isBF ? 'fuel' : 'co2')) : null;
                 var fetchTime = Date.now();
                 response.clone().json().then(function(data) {
                     var cashAfter2 = extractCash(data) || getCashFromPinia();
-                    var cost2 = (cashBefore2 !== null && cashAfter2 !== null && cashBefore2 > cashAfter2)
-                        ? Math.round(cashBefore2 - cashAfter2) : null;
+                    var cost2 = null;
                     var body2 = {};
                     try { body2 = JSON.parse(opts.body || '{}'); } catch {}
-                    if ((isBF || iBC) && !cost2) {
-                        var amtKg2 = body2.amount || 0;
-                        var cp2 = 0;
-                        try { if (window._paBunkerPrices) cp2 = isBF ? (window._paBunkerPrices.fuel || 0) : (window._paBunkerPrices.co2 || 0); } catch {}
-                        if (!cp2) cp2 = parseFloat(localStorage.getItem('pa_price_' + (isBF ? 'fuel' : 'co2')) || '0');
-                        if (amtKg2 > 0 && cp2 > 0) cost2 = Math.round((amtKg2 / 1000) * cp2);
+                    var bunkerExtra = null;
+                    if (isBF || iBC) {
+                        // 1.0.2: unit-aware request, delivered tonnes and verified charge (Depart Manager result when available)
+                        var bComm = isBF ? 'fuel' : 'co2';
+                        var bReq = paBunkerRequest(body2, bComm, paLpSnap);
+                        var bPrice = bReq.price || paKnownPrice(bComm);
+                        var bDm = null;
+                        try { bDm = bReq.id && window._dmPurchaseResults ? window._dmPurchaseResults[bReq.id] : null; } catch {}
+                        var bCash = (cashBefore2 !== null && cashAfter2 !== null && cashBefore2 > cashAfter2) ? Math.round(cashBefore2 - cashAfter2) : null;
+                        var bAcc = paBunkerAccounting({ orderedTons: bReq.orderedTons, price: bPrice, dm: bDm, respStockKg: paStockFromResponse(data, bComm), stockBeforeKg: stockBefore2,
+                            cashCost: bCash, success: !(data && (data.error || (data.data && data.data.success === false))) });
+                        cost2 = bAcc.cost; bunkerExtra = bAcc.fields;
+                        if (bReq.id) { bunkerExtra.dmPurchaseId = bReq.id; if (!bDm) bunkerExtra.awaitingDm = true; }
+                        bunkerExtra.requestUnit = bReq.unit;
+                    }
+                    if (cost2 === null && cashBefore2 !== null && cashAfter2 !== null && cashBefore2 > cashAfter2) {
+                        cost2 = Math.round(cashBefore2 - cashAfter2); // last resort only (drydock/marketing keep this path)
                     }
                     if (cashAfter2 !== null) lastKnownCash = cashAfter2;
                     var label = isBF ? 'Fuel Purchase' : iBC ? 'CO2 Purchase' : isDK ? 'Drydock Maintenance' : 'Marketing Campaign';
                     var type  = isBF ? 'bunker_fuel' : iBC ? 'bunker_co2' : isDK ? 'drydock' : 'marketing';
                     var extra = {};
-                    if (isBF || iBC) extra.amountTons = (body2.amount || 0) / 1000;
+                    if (bunkerExtra) extra = bunkerExtra;
                     if (isDK) extra.vesselCount = (body2.vessel_ids || []).length;
                     logTransaction(Object.assign({ timestamp: fetchTime, date: new Date(fetchTime).toISOString().split('T')[0], type: type, label: label, cost: cost2, direction: 'out' }, extra));
                 }).catch(function(){});
@@ -791,6 +958,9 @@
         var rows = txs.map(function(t) {
             var detail = '';
             if (t.amountTons) detail = t.amountTons.toFixed(1) + 't';
+            if (t.orderedTons !== undefined && t.amountTons !== undefined && Math.abs(t.orderedTons - t.amountTons) > 0.05) detail += ' ordered:' + t.orderedTons.toFixed(1) + 't';
+            if (t.failed) detail += ' FAILED';
+            if (t.discrepancy && t.discrepancy.length) detail += ' ' + t.discrepancy.join('|');
             if (t.item) detail = t.item;
             if (t.income) detail = 'Income:' + t.income + ' HarborFee:' + (t.harborFee||0) + ' ChannelFee:' + (t.channelFee||0);
             return [t.date, t.type, t.label, t.direction, t.income || '', t.cost || '', detail].join(',');
@@ -1021,6 +1191,15 @@
             var totalOut = txs.filter(function(t){return t.direction==='out';}).reduce(function(s,t){return s+(t.cost||0);},0);
             var net = totalIn - totalOut;
 
+            // 1.0.2: bunker purchases whose delivery or charge differs from the order
+            var bunkerDisc = txs.filter(function(t) { return t.discrepancy && t.discrepancy.length && !t.failed; });
+            var bunkerExtraCost = bunkerDisc.reduce(function(sum, t) { return sum + ((t.cost || 0) - (t.costOrdered || 0)); }, 0);
+            var bunkerFailed = txs.filter(function(t) { return t.failed; }).length;
+            var bunkerBanner = (bunkerDisc.length || bunkerFailed)
+                ? '<div style="padding:6px 16px;background:#3a1a1a;color:#ffb4b4;font-size:11px;border-bottom:1px solid #5a2a2a;">Bunker discrepancies: ' + bunkerDisc.length +
+                  ' purchase(s) delivered/charged differently from the order (' + (bunkerExtraCost >= 0 ? '+' : '-') + fmt$(Math.abs(bunkerExtraCost)) + ' vs ordered)' +
+                  (bunkerFailed ? '; ' + bunkerFailed + ' refused by the game (cost 0)' : '') + '. Costs below are the verified charges.</div>' : '';
+
             var filterBtns = ['all','in','out','bunker_fuel','bunker_co2','drydock','repair','shop','marketing'].map(function(f) {
                 var labels = {all:'All',in:'Income',out:'Outgoing',bunker_fuel:'Fuel',bunker_co2:'CO2',drydock:'Drydock',repair:'Repair',shop:'Shop',marketing:'Marketing'};
                 var active = txFilter === f ? 'background:#253347;color:#e2e8f0;' : '';
@@ -1035,6 +1214,10 @@
                 if (t.channelFee)  detail += 'Channel: ' + fmt$(t.channelFee) + ' ';
                 if (t.guardFee)    detail += 'Guards: ' + fmt$(t.guardFee) + ' ';
                 if (t.amountTons)  detail += fmtN(t.amountTons,1) + 't @ ' + (t.cost && t.amountTons ? fmt$(t.cost / t.amountTons) + '/t' : '?/t') + ' ';
+                if (t.orderedTons !== undefined && t.amountTons !== undefined && Math.abs(t.orderedTons - t.amountTons) > 0.05) detail += '(ordered ' + fmtN(t.orderedTons,1) + 't) ';
+                if (t.failed) detail += '[REFUSED - nothing bought] ';
+                else if (t.discrepancy && t.discrepancy.length) detail += '[! ' + t.discrepancy.join(', ') + '] ';
+                if (t.awaitingDm) detail += '(awaiting Depart Manager verification) ';
                 if (t.vesselCount) detail += t.vesselCount + ' vessel(s)';
                 if (t.item)        detail += t.item;
                 return '<tr>' +
@@ -1052,6 +1235,7 @@
                   '<div class="pa-stat"><div class="pa-stat-lbl">Net</div><div class="pa-stat-val '+(net>=0?'pa-green':'pa-red')+'">' + fmt$(net) + '</div></div>' +
                   '<div class="pa-stat"><div class="pa-stat-lbl">Transactions</div><div class="pa-stat-val">' + txs.length + '</div></div>' +
                 '</div>' +
+                bunkerBanner +
                 '<div style="padding:8px 16px;display:flex;gap:6px;border-bottom:1px solid #1e2d42;background:#080b10;">' + filterBtns + '</div>' +
                 '<div style="overflow:auto;height:calc(100% - 120px);">' +
                 '<table><thead><tr><th class="left">Date</th><th class="left">Type</th><th>Amount</th><th class="left">Detail</th></tr></thead>' +
