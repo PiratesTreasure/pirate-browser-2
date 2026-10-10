@@ -1096,6 +1096,13 @@
     async function purchaseFuelAPI(amountTons, pricePerTon) {
         try {
             if (amountTons <= 0) return { success: false, error: 'Amount <= 0' };
+            // The bunker endpoint reads `amount` in TONNES (the game's own bunker window sends toPurchase / 1e3 with toPurchase in kg).
+            // Sending tonnes * 1000 made the server treat a small order as a huge one and clamp it to the free space, i.e. fill the tank.
+            var amountT = Math.floor(amountTons + 1e-9);
+            if (amountT < 1) {
+                log('Fuel purchase withheld - order below 1 t');
+                return { success: false, error: 'Amount < 1 t' };
+            }
 
             // Hard cooldown: prevent duplicate purchases within 30 seconds
             var now = Date.now();
@@ -1105,14 +1112,15 @@
             }
             lastFuelPurchaseTime = now;
 
-            var amountKg = Math.floor(amountTons * 1000);
-            log('Purchasing ' + amountTons.toFixed(0) + 't fuel @ $' + pricePerTon + '/t');
+            log('Purchasing ' + amountT + 't fuel @ $' + pricePerTon + '/t');
+            // Published just before the request so Pirate Analytics can tell the unit of this request (tonnes) from the older kilogram requests
+            try { window._dmLastPurchase = { commodity: 'fuel', amountTons: amountT, pricePerTon: pricePerTon, at: Date.now(), requestAmount: amountT, unit: 't' }; } catch (e) { /* ignore */ }
 
             var response = await originalFetch(API_BASE + '/bunker/purchase-fuel', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ amount: amountKg })
+                body: JSON.stringify({ amount: amountT })
             });
 
             if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -1122,7 +1130,7 @@
 
             // PA logging handled by pirate-analytics fetch interceptor — no manual log needed
 
-            notify('Purchased ' + formatNumber(amountTons) + 't fuel @ $' + formatNumber(pricePerTon), 'success', 'fuel');
+            notify('Purchased ' + formatNumber(amountT) + 't fuel @ $' + formatNumber(pricePerTon), 'success', 'fuel');
             return { success: true, data: data };
         } catch (e) {
             log('Fuel purchase failed: ' + e.message, 'error');
